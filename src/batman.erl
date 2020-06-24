@@ -13,10 +13,49 @@
 -behaviour(wx_object).
 -export([test/0]).
 
+-record(state,
+{
+  parent,
+  config,
+  canvas,
+  bitmap,
+  overlay,
+  pos
+}).
 
 test() -> wx:new(),
   F=wxFrame:new(wx:null(),?wxID_ANY,"Field of nodebarries"),
-  wxStaticText:new(F, ?wxID_ANY,"cos emek",[{style, ?wxALIGN_RIGHT}]),
+  Panel = wxPanel:new(F, []),
+  MainSizer = wxBoxSizer:new(?wxVERTICAL),
+  Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Panel,
+    [{label, "Various shapes"}]),
+
+  Button = wxButton:new(Panel, ?wxID_ANY, [{label, "Redraw"}]),
+
+  Canvas = wxPanel:new(Panel, [{style, ?wxFULL_REPAINT_ON_RESIZE}]),
+
+  wxPanel:connect(Button, command_button_clicked),
+
+  %% Add to sizers
+  wxSizer:add(Sizer, Button, [{border, 5}, {flag, ?wxALL}]),
+  wxSizer:addSpacer(Sizer, 5),
+  wxSizer:add(Sizer, Canvas, [{flag, ?wxEXPAND},
+    {proportion, 1}]),
+
+  wxSizer:add(MainSizer, Sizer, [{flag, ?wxEXPAND},
+    {proportion, 1}]),
+
+  wxPanel:setSizer(Panel, MainSizer),
+  wxSizer:layout(MainSizer),
+
+  {W,H} = wxPanel:getSize(Canvas),
+  Bitmap = wxBitmap:new(erlang:max(W,30),erlang:max(30,H)),
+
+  {Panel, #state{parent=Panel, config=Config,
+    canvas = Canvas, bitmap = Bitmap,
+    overlay = wxOverlay:new()
+  }}.
+%%  wxStaticText:new(F, ?wxID_ANY,"cos emek",[{style, ?wxALIGN_RIGHT}]),
 %%  Counter = wxStaticText:new(F, ?wxID_ANY,integer_to_list(10)),
 %%  wxFrame:show(F),
 %%  countdown(9,Counter).
