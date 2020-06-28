@@ -6,16 +6,20 @@
 %%% @end
 %%% Created : 28. Jun 2020 3:48 PM
 %%%-------------------------------------------------------------------
+%%% C5 in charge of spawning the other computers and monitor them
+%%%-------------------------------------------------------------------
+%%%-------------------------------------------------------------------
+
 -module(mainServer).
 -author("amit").
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/2]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+-export([init/2, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
 -define(SERVER, ?MODULE).
@@ -27,10 +31,12 @@
 %%%===================================================================
 
 %% @doc Spawns the server and registers the local name (unique)
--spec(start_link() ->
+-spec(start_link(ComputerNodes::list(),ComputersArea::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+% ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
+% ComputersArea-> [{startX,endX,startY,endY},...] size 4
+start_link(ComputerNodes,ComputersArea) ->
+    gen_server:start_link({global, ?SERVER}, ?MODULE, [ComputerNodes,ComputersArea], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -41,8 +47,15 @@ start_link() ->
 -spec(init(Args :: term()) ->
   {ok, State :: #mainServer_state{}} | {ok, State :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([]) ->
+
+init(ComputerNodes,ComputersArea) ->
   {ok, #mainServer_state{}}.
+
+% spawns a Computer at a specific node and monitors it
+spawnComputer(Node,ComputerNodes,ComputersArea) ->   rpc:call(Node, computerStateM,init,[ComputerNodes,ComputersArea]), %builds a Computer at Node
+  erlang:monitor_node(Node,true). % makes the mainServer monitor the new computer at Node
+
+
 
 %% @private
 %% @doc Handling call messages
@@ -74,6 +87,10 @@ handle_cast(_Request, State = #mainServer_state{}) ->
   {stop, Reason :: term(), NewState :: #mainServer_state{}}).
 handle_info(_Info, State = #mainServer_state{}) ->
   {noreply, State}.
+
+%%handle_info({'EXIT', Pid, Reason}, State) ->
+%%  ..code to handle exits here..
+%%  {noreply, State1}.
 
 %% @private
 %% @doc This function is called by a gen_server when it is about to
