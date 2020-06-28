@@ -4,19 +4,19 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 28. Jun 2020 5:41 PM
+%%% Created : 28. Jun 2020 6:42 PM
 %%%-------------------------------------------------------------------
 -module(computerStateM).
 -author("amit").
 
--behaviour(gen_statem).
+-behaviour(gen_server).
 
 %% API
 -export([start_link/0]).
 
-%% gen_statem callbacks
--export([init/1, format_status/2, state_name/3, handle_event/4, terminate/3,
-  code_change/4, callback_mode/0]).
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+  code_change/3]).
 
 -define(SERVER, ?MODULE).
 
@@ -26,66 +26,72 @@
 %%% API
 %%%===================================================================
 
-%% @doc Creates a gen_statem process which calls Module:init/1 to
-%% initialize. To ensure a synchronized start-up procedure, this
-%% function does not return until Module:init/1 has returned.
+%% @doc Spawns the server and registers the local name (unique)
+-spec(start_link() ->
+  {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  gen_statem:start_link({local, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
-%%% gen_statem callbacks
+%%% gen_server callbacks
 %%%===================================================================
 
 %% @private
-%% @doc Whenever a gen_statem is started using gen_statem:start/[3,4] or
-%% gen_statem:start_link/[3,4], this function is called by the new
-%% process to initialize.
+%% @doc Initializes the server
+-spec(init(Args :: term()) ->
+  {ok, State :: #computerStateM_state{}} | {ok, State :: #computerStateM_state{}, timeout() | hibernate} |
+  {stop, Reason :: term()} | ignore).
 init([]) ->
-  {ok, state_name, #computerStateM_state{}}.
+  {ok, #computerStateM_state{}}.
 
 %% @private
-%% @doc This function is called by a gen_statem when it needs to find out
-%% the callback mode of the callback module.
-callback_mode() ->
-  handle_event_function.
+%% @doc Handling call messages
+-spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
+    State :: #computerStateM_state{}) ->
+  {reply, Reply :: term(), NewState :: #computerStateM_state{}} |
+  {reply, Reply :: term(), NewState :: #computerStateM_state{}, timeout() | hibernate} |
+  {noreply, NewState :: #computerStateM_state{}} |
+  {noreply, NewState :: #computerStateM_state{}, timeout() | hibernate} |
+  {stop, Reason :: term(), Reply :: term(), NewState :: #computerStateM_state{}} |
+  {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
+handle_call(_Request, _From, State = #computerStateM_state{}) ->
+  {reply, ok, State}.
 
 %% @private
-%% @doc Called (1) whenever sys:get_status/1,2 is called by gen_statem or
-%% (2) when gen_statem terminates abnormally.
-%% This callback is optional.
-format_status(_Opt, [_PDict, _StateName, _State]) ->
-  Status = some_term,
-  Status.
+%% @doc Handling cast messages
+-spec(handle_cast(Request :: term(), State :: #computerStateM_state{}) ->
+  {noreply, NewState :: #computerStateM_state{}} |
+  {noreply, NewState :: #computerStateM_state{}, timeout() | hibernate} |
+  {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
+handle_cast(_Request, State = #computerStateM_state{}) ->
+  {noreply, State}.
 
 %% @private
-%% @doc There should be one instance of this function for each possible
-%% state name.  If callback_mode is state_functions, one of these
-%% functions is called when gen_statem receives and event from
-%% call/2, cast/2, or as a normal process message.
-state_name(_EventType, _EventContent, State = #computerStateM_state{}) ->
-  NextStateName = next_state,
-  {next_state, NextStateName, State}.
+%% @doc Handling all non call/cast messages
+-spec(handle_info(Info :: timeout() | term(), State :: #computerStateM_state{}) ->
+  {noreply, NewState :: #computerStateM_state{}} |
+  {noreply, NewState :: #computerStateM_state{}, timeout() | hibernate} |
+  {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
+handle_info(_Info, State = #computerStateM_state{}) ->
+  {noreply, State}.
 
 %% @private
-%% @doc If callback_mode is handle_event_function, then whenever a
-%% gen_statem receives an event from call/2, cast/2, or as a normal
-%% process message, this function is called.
-handle_event(_EventType, _EventContent, _StateName, State = #computerStateM_state{}) ->
-  NextStateName = the_next_state_name,
-  {next_state, NextStateName, State}.
-
-%% @private
-%% @doc This function is called by a gen_statem when it is about to
+%% @doc This function is called by a gen_server when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_statem terminates with
-%% Reason. The return value is ignored.
-terminate(_Reason, _StateName, _State = #computerStateM_state{}) ->
+%% necessary cleaning up. When it returns, the gen_server terminates
+%% with Reason. The return value is ignored.
+-spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+    State :: #computerStateM_state{}) -> term()).
+terminate(_Reason, _State = #computerStateM_state{}) ->
   ok.
 
 %% @private
 %% @doc Convert process state when code is changed
-code_change(_OldVsn, StateName, State = #computerStateM_state{}, _Extra) ->
-  {ok, StateName, State}.
+-spec(code_change(OldVsn :: term() | {down, term()}, State :: #computerStateM_state{},
+    Extra :: term()) ->
+  {ok, NewState :: #computerStateM_state{}} | {error, Reason :: term()}).
+code_change(_OldVsn, State = #computerStateM_state{}, _Extra) ->
+  {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
