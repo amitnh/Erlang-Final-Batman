@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 28. Jun 2020 6:42 PM
 %%%-------------------------------------------------------------------
--module(computerStateM).
+-module(computerServer).
 -author("amit").
 
 -behaviour(gen_server).
@@ -30,7 +30,7 @@
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -42,6 +42,8 @@ start_link() ->
   {ok, State :: #computerStateM_state{}} | {ok, State :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
+  ets:new(etsX,[ordered_set,public,named_table]),
+  ets:new(etsY,[ordered_set,public,named_table]),
   {ok, #computerStateM_state{}}.
 
 %% @private

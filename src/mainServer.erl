@@ -49,10 +49,11 @@ start_link(ComputerNodes,ComputersArea) ->
   {stop, Reason :: term()} | ignore).
 
 init(ComputerNodes,ComputersArea) ->
+  ets:new(etsRobins,[set,named_table,public]), % Pid-> {X,Y}
   {ok, #mainServer_state{}}.
 
 % spawns a Computer at a specific node and monitors it
-spawnComputer(Node,ComputerNodes,ComputersArea) ->   rpc:call(Node, computerStateM,init,[ComputerNodes,ComputersArea]), %builds a Computer at Node
+spawnComputer(Node,ComputerNodes,ComputersArea) ->   rpc:call(Node, computerServer,start_link,[ComputerNodes,ComputersArea]), %builds a Computer at Node
   erlang:monitor_node(Node,true). % makes the mainServer monitor the new computer at Node
 
 
