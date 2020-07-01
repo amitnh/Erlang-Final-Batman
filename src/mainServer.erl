@@ -19,7 +19,7 @@
 -export([start_link/2]).
 
 %% gen_server callbacks
--export([init/2, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
 -define(SERVER, ?MODULE).
@@ -36,7 +36,7 @@
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputersArea-> [{startX,endX,startY,endY},...] size 4
 start_link(ComputerNodes,ComputersArea) ->
-    gen_server:start_link({global, ?SERVER}, ?MODULE, [ComputerNodes,ComputersArea], []).
+    gen_server:start_link({global, ?SERVER}, ?MODULE, [{ComputerNodes,ComputersArea}], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -44,16 +44,24 @@ start_link(ComputerNodes,ComputersArea) ->
 
 %% @private
 %% @doc Initializes the server
--spec(init(Args :: term()) ->
+-spec(init(Args::term()) ->
   {ok, State :: #mainServer_state{}} | {ok, State :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 
-init(ComputerNodes,ComputersArea) ->
-  ets:new(etsRobins,[set,named_table,public]), % Pid-> {X,Y}
+init([{ComputerNodes,ComputersArea}]) ->
+  io:format("1~n"),
+  ets:new(etsRobins,[set,named_table,public]), % Pid@Node -> {X,Y}
+  %lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers
+  %lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area
+  io:format("2~n"),
+  spawnComputer(ComputerNodes,ComputersArea,loop),
+  io:format("3~n"),
   {ok, #mainServer_state{}}.
 
+%start server for computer for each node in the ComputerNodes list
+spawnComputer(ComputerNodes,ComputersArea,loop) -> [spawnComputer(ComputerNodes,ComputersArea,Node) || Node<- ComputerNodes];
 % spawns a Computer at a specific node and monitors it
-spawnComputer(Node,ComputerNodes,ComputersArea) ->   rpc:call(Node, computerServer,start_link,[ComputerNodes,ComputersArea]), %builds a Computer at Node
+spawnComputer(ComputerNodes,ComputersArea,Node) ->   rpc:call(Node, computerServer,start_link,[ComputerNodes,ComputersArea]), %builds a Computer at Node
   erlang:monitor_node(Node,true). % makes the mainServer monitor the new computer at Node
 
 
@@ -77,6 +85,9 @@ handle_call(_Request, _From, State = #mainServer_state{}) ->
   {noreply, NewState :: #mainServer_state{}} |
   {noreply, NewState :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #mainServer_state{}}).
+handle_cast(hello, State = #mainServer_state{}) ->
+  io:format("hello"),
+  {noreply, State};
 handle_cast(_Request, State = #mainServer_state{}) ->
   {noreply, State}.
 

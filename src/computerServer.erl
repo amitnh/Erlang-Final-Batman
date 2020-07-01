@@ -44,6 +44,7 @@ start_link() ->
 init([]) ->
   ets:new(etsX,[ordered_set,public,named_table]),
   ets:new(etsY,[ordered_set,public,named_table]),
+  gen_server:cast(mainServer,hello),
   {ok, #computerStateM_state{}}.
 
 %% @private
