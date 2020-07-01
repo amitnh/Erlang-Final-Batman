@@ -23,6 +23,7 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(UpdateTime, 1000). % time for sending the ETSES tables
 
 -record(mainServer_state, {}).
 
@@ -49,19 +50,25 @@ start_link(ComputerNodes,ComputersArea) ->
   {stop, Reason :: term()} | ignore).
 
 init([{ComputerNodes,ComputersArea}]) ->
-  io:format("1~n"),
   ets:new(etsRobins,[set,named_table,public]), % Pid@Node -> {X,Y}
-  %lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers
-  %lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area
-  io:format("2~n"),
+%%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers
+%%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area
   spawnComputer(ComputerNodes,ComputersArea,loop),
-  io:format("3~n"),
+  register(test,spawn(test())),
   {ok, #mainServer_state{}}.
+
+%a process updateMainServer sends every UpdateTime mili secs the ETS tables to the main server
+test()-> receive
+           M-> io:format("im test: ~p~n",[M]), test()
+                     after ?UpdateTime -> gen_server:call({global,amit@Megatron},sendLocations),
+    %@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@change to multi call
+    test() %recursion call
+         end.
 
 %start server for computer for each node in the ComputerNodes list
 spawnComputer(ComputerNodes,ComputersArea,loop) -> [spawnComputer(ComputerNodes,ComputersArea,Node) || Node<- ComputerNodes];
 % spawns a Computer at a specific node and monitors it
-spawnComputer(ComputerNodes,ComputersArea,Node) ->   rpc:call(Node, computerServer,start_link,[ComputerNodes,ComputersArea]), %builds a Computer at Node
+spawnComputer(ComputerNodes,ComputersArea,Node) ->   rpc:call(Node, computerServer,start_link,[Node,ComputerNodes,ComputersArea]), %builds a Computer at Node
   erlang:monitor_node(Node,true). % makes the mainServer monitor the new computer at Node
 
 
@@ -85,9 +92,13 @@ handle_call(_Request, _From, State = #mainServer_state{}) ->
   {noreply, NewState :: #mainServer_state{}} |
   {noreply, NewState :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #mainServer_state{}}).
-handle_cast(hello, State = #mainServer_state{}) ->
-  io:format("hello"),
+
+%regular ETS update feom Node
+%EtsX and EtsY are lists of the original ETSes
+handle_cast({location,Node,EtsX,EtsY}, State = #mainServer_state{}) ->
+  test ! {location,Node,EtsX,EtsY},
   {noreply, State};
+
 handle_cast(_Request, State = #mainServer_state{}) ->
   {noreply, State}.
 

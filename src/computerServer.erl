@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -27,10 +27,13 @@
 %%%===================================================================
 
 %% @doc Spawns the server and registers the local name (unique)
--spec(start_link() ->
+-spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+start_link([Node,ComputerNodes,ComputersArea]) ->
+  gen_server:start_link({global, Node}, ?MODULE, [], []).
+
+
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -42,9 +45,8 @@ start_link() ->
   {ok, State :: #computerStateM_state{}} | {ok, State :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
-  ets:new(etsX,[ordered_set,public,named_table]),
-  ets:new(etsY,[ordered_set,public,named_table]),
-  gen_server:cast(mainServer,hello),
+  ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
+  ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   {ok, #computerStateM_state{}}.
 
 %% @private
@@ -57,6 +59,9 @@ init([]) ->
   {noreply, NewState :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #computerStateM_state{}} |
   {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
+handle_call(sendLocations, _From, State = #computerStateM_state{}) ->
+  {reply, {ets:tab2list(etsX),ets:tab2list(etsY)}, State};
+
 handle_call(_Request, _From, State = #computerStateM_state{}) ->
   {reply, ok, State}.
 
