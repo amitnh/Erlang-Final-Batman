@@ -20,7 +20,13 @@
 
 -define(SERVER, ?MODULE).
 
--record(batmanProtocol_state, {}).
+%%%===================================================================
+-record(batmanProtocol_state, {known}).
+%% known is a map of known Robins in the system
+%% each Robin contains map of neighbors Pid that he received messages from
+%% each neighbor contain a sorted list of Relevant (in-window) sequence numbers for the relevant Robin
+%%%===================================================================
+
 
 %%%===================================================================
 %%% API
@@ -30,7 +36,7 @@
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -42,6 +48,7 @@ start_link() ->
   {ok, State :: #batmanProtocol_state{}} | {ok, State :: #batmanProtocol_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
+%%  spawn_link(moveSimulator,start_link(),[]),  %creates moveSimulator and link it to this process
   {ok, #batmanProtocol_state{}}.
 
 %% @private
