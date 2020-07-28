@@ -26,6 +26,8 @@
 %% each Robin contains map of neighbors Pid that he received messages from
 %% each neighbor contain a sorted list of Relevant (in-window) sequence numbers for the relevant Robin
 %%%===================================================================
+-define(windowSize, 128). %% Define the size of the window. only sequance numbers in the window will be counted and saved
+-define(TTL, 40). %% Time To Live, travel distance of a message
 
 
 %%%===================================================================
@@ -48,9 +50,12 @@ start_link() ->
   {ok, State :: #batmanProtocol_state{}} | {ok, State :: #batmanProtocol_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
-%%  spawn_link(moveSimulator,start_link(),[]),  %creates moveSimulator and link it to this process
-  {ok, #batmanProtocol_state{}}.
+%%  spawn_link(moveSimulator,start_link(),[]),  %creates moveSimulator and link it to this process TODO: remove comment
+  {ok, #batmanProtocol_state{known = maps:new()}}. %return a new empty map of known Robins
 
+ogmLoop()-> receive
+              after 1000-> sendOGM %TODO sendOGM function -> call get negibors from moveSimulator and sends tem the message
+            end,
 %% @private
 %% @doc Handling call messages
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
