@@ -50,17 +50,17 @@ start_link(ComputerNodes,ComputersArea) ->
   {stop, Reason :: term()} | ignore).
 
 init([{ComputerNodes,ComputersArea}]) ->
-  ets:new(etsRobins,[set,named_table,public]), % Pid@Node -> {X,Y}
+  ets:new(etsRobins,[set,public,named_table]), % Pid@Node -> {X,Y}
 %%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers
 %%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area
   spawnComputer(ComputerNodes,ComputersArea,loop),
-  register(test,spawn(test())),
+%%  register(test,spawn(test())),
   {ok, #mainServer_state{}}.
 
 %a process updateMainServer sends every UpdateTime mili secs the ETS tables to the main server
 test()-> receive
            M-> io:format("im test: ~p~n",[M]), test()
-                     after ?UpdateTime -> gen_server:call({global,amit@Megatron},sendLocations),
+                     after ?UpdateTime -> gen_server:call({global,amit@ubuntu},sendLocations),
     %@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@change to multi call
     test() %recursion call
          end.
@@ -93,7 +93,7 @@ handle_call(_Request, _From, State = #mainServer_state{}) ->
   {noreply, NewState :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #mainServer_state{}}).
 
-%regular ETS update feom Node
+%regular ETS update from Node
 %EtsX and EtsY are lists of the original ETSes
 handle_cast({location,Node,EtsX,EtsY}, State = #mainServer_state{}) ->
   test ! {location,Node,EtsX,EtsY},

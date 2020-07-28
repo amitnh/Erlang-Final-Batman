@@ -19,6 +19,7 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(N, 20). % number of processes in all the program "Robins"
 
 -record(computerStateM_state, {}).
 
@@ -47,7 +48,12 @@ start_link([Node,ComputerNodes,ComputersArea]) ->
 init([]) ->
   ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
+  initRobins(),   %% spawn N/4 Robins
   {ok, #computerStateM_state{}}.
+
+initRobins() -> %spawn N/4 Robins
+  Loop = lists:seq(1,?N div 4),
+  [erlang:monitor_node(spawn(batmanProtocol,start_link,[]),true)|| _<- Loop]. %spawn a Robin and monitor it
 
 %% @private
 %% @doc Handling call messages
