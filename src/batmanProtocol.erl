@@ -55,7 +55,7 @@ init([]) ->
 
 ogmLoop()-> receive
               after 1000-> sendOGM %TODO sendOGM function -> call get negibors from moveSimulator and sends tem the message
-            end,
+            end.
 %% @private
 %% @doc Handling call messages
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
