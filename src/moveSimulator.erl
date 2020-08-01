@@ -43,7 +43,6 @@ start_link([Area]) ->
   {stop, Reason :: term()} | ignore).
 init([MyArea]) ->
    spawn_link(batmanProtocol,start_link(),[]),  %creates batmanProtocol and link it to this process TODO: remove comment
-
   {ok, #moveSimulator_state{myArea = MyArea}}.
 
 %% @private
@@ -65,8 +64,13 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
   {noreply, NewState :: #moveSimulator_state{}} |
   {noreply, NewState :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
+% if i was close to the border, but the border changed, the computerServer will update us by sending
+% updateArea cast msg, as following:
+handle_cast({updateArea,NewArea}, _) ->
+  {noreply, #moveSimulator_state{myArea = NewArea}};
 handle_cast(_Request, State = #moveSimulator_state{}) ->
   {noreply, State}.
+
 
 %% @private
 %% @doc Handling all non call/cast messages
