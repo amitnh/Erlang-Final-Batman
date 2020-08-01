@@ -27,27 +27,30 @@ init() ->do_init().%%wx:batch(fun() -> do_init() end).
           overlay,
           pos
         }).
-do_init() ->
+do_init() ->    %%F=frame P=panel C=canvas
   wx:new(),
   F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width,?Height}}]),
   P = wxPanel:new(F, [{size, {?Width,?Height-100}}, {pos,{500, 500}}]),
-
+  C = wxPanel:new(P, [{style, ?wxFULL_REPAINT_ON_RESIZE}]),
   MainSizer = wxBoxSizer:new(?wxVERTICAL),
   Sizer = wxStaticBoxSizer:new(?wxVERTICAL, P, [{label, "Batman bounderies"}]),
-  T = wxStaticText:new(P, -1, "Displaying..",[{pos,{0, 50}}]),
+  T = wxStaticText:new(P, -1, "Displaying..",[]),
   B = wxButton:new(P, 0, [{label, "Start"}, {size, {150, 50}}]),
   wxButton:connect(B, command_button_clicked, [{callback, fun handle_click/2}, {userData, #{text => T, env => wx:get_env()}}]),
 
   wxSizer:add(Sizer, B, [{border, 5}, {flag, ?wxALL}]),
   wxSizer:addSpacer(Sizer, 5),
-  wxSizer:add(Sizer, P, [{flag, ?wxEXPAND}, {proportion, 1}]),
+  wxSizer:add(Sizer, T, [{border, 5}, {flag, ?wxALL}]),
+  wxSizer:addSpacer(Sizer, 5),
+  wxSizer:add(Sizer, C, [{flag, ?wxEXPAND}, {proportion, 1}]),
   wxSizer:add(MainSizer, Sizer, [{flag, ?wxEXPAND}, {proportion, 1}]),
   wxPanel:setSizer(P, MainSizer),
   wxSizer:layout(MainSizer),
 %%  {W,H} = wxPanel:getSize(P),
 %%  Bitmap = wxBitmap:new(erlang:max(W,30),erlang:max(30,H)),
   wxFrame:show(F),
-
+%%c(gui). gui:init().
+%%
   mainLoop(#state{frame = F, env = wx:get_env(),panel = P}).
 
 handle_click(#wx{obj = _, userData = #{text := T, env := Env}},_Event) ->
