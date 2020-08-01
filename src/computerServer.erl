@@ -23,7 +23,7 @@
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 
 
--record(computerStateM_state, {myNode,computerNodes,computersArea,startX,endX,startY,endY}).
+-record(computerStateM_state, {computerNodes,computersArea, myArea}).
 
 %%%===================================================================
 %%% API
@@ -32,8 +32,8 @@
 %% @doc Spawns the server and registers the local name (unique)
 -spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link([Node,ComputerNodes,ComputersArea]) ->
-  gen_server:start_link({global, Node}, ?MODULE, [Node,ComputerNodes,ComputersArea], []).
+start_link([ComputerNodes,ComputersArea]) ->
+  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea], []).
 
 
 %%%===================================================================
@@ -45,15 +45,21 @@ start_link([Node,ComputerNodes,ComputersArea]) ->
 -spec(init(Args :: term()) ->
   {ok, State :: #computerStateM_state{}} | {ok, State :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([Node,ComputerNodes,ComputersArea]) -> %gets the area of the computer, the borders.
+init([ComputerNodes,ComputersArea]) -> %gets the area of the computer, the borders.
   ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
-  initRobins(Node,ComputerNodes,ComputersArea),   %% spawn N/4 Robins
-  {ok, #computerStateM_state{myNode = Node,computerNodes = ComputerNodes, computersArea = ComputersArea}}. %saves the area border
+  MyArea = getArea(ComputerNodes,ComputersArea,node()),
+  initRobins(MyArea),   %% spawn N/4 Robins
+  {ok, #computerStateM_state{computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea}}. %saves the area border
 
-initRobins(Node,ComputerNodes,ComputersArea) -> %spawn N/4 Robins
+% gets My Area from lists of nodes and areas
+getArea([],[],_)-> areaCantBeFound;
+getArea([MyNode|_],[Area|_],MyNode) -> Area;
+getArea([_|T1],[_|T2],MyNode) -> getArea(T1,T2,MyNode).
+
+initRobins(MyArea) -> %spawn N/4 Robins
   Loop = lists:seq(1,?N div 4),
-  [erlang:monitor_node(spawn(moveSimulator,start_link,[Node,ComputerNodes,ComputersArea]),true)|| _<- Loop]. %spawn a Robin and monitor it
+  [erlang:monitor(process,spawn(moveSimulator,start_link,[MyArea]),true)|| _<- Loop]. %spawn a Robin and monitor it
 
 %% @private
 %% @doc Handling call messages

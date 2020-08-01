@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -20,7 +20,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(moveSimulator_state, {}).
+-record(moveSimulator_state, {myArea}).
 
 %%%===================================================================
 %%% API
@@ -29,8 +29,8 @@
 %% @doc Spawns the server and registers the local name (unique)
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link([Area]) ->
+  gen_server:start_link( ?MODULE, [Area], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -41,9 +41,10 @@ start_link() ->
 -spec(init(Args :: term()) ->
   {ok, State :: #moveSimulator_state{}} | {ok, State :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([]) ->
+init([MyArea]) ->
    spawn_link(batmanProtocol,start_link(),[]),  %creates batmanProtocol and link it to this process TODO: remove comment
-  {ok, #moveSimulator_state{}}.
+
+  {ok, #moveSimulator_state{myArea = MyArea}}.
 
 %% @private
 %% @doc Handling call messages
