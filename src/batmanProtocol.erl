@@ -50,7 +50,6 @@ start_link() ->
   {ok, State :: #batmanProtocol_state{}} | {ok, State :: #batmanProtocol_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
-%%  spawn_link(moveSimulator,start_link(),[]),  %creates moveSimulator and link it to this process TODO: remove comment
   {ok, #batmanProtocol_state{known = maps:new()}}. %return a new empty map of known Robins
 
 ogmLoop()-> receive

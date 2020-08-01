@@ -20,8 +20,10 @@
 
 -define(SERVER, ?MODULE).
 -define(N, 20). % number of processes in all the program "Robins"
+-define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 
--record(computerStateM_state, {}).
+
+-record(computerStateM_state, {myNode,computerNodes,computersArea,startX,endX,startY,endY}).
 
 %%%===================================================================
 %%% API
@@ -31,9 +33,7 @@
 -spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Node,ComputerNodes,ComputersArea]) ->
-  gen_server:start_link({global, Node}, ?MODULE, [], []).
-
-
+  gen_server:start_link({global, Node}, ?MODULE, [Node,ComputerNodes,ComputersArea], []).
 
 
 %%%===================================================================
@@ -45,15 +45,15 @@ start_link([Node,ComputerNodes,ComputersArea]) ->
 -spec(init(Args :: term()) ->
   {ok, State :: #computerStateM_state{}} | {ok, State :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([]) ->
+init([Node,ComputerNodes,ComputersArea]) -> %gets the area of the computer, the borders.
   ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
-  initRobins(),   %% spawn N/4 Robins
-  {ok, #computerStateM_state{}}.
+  initRobins(Node,ComputerNodes,ComputersArea),   %% spawn N/4 Robins
+  {ok, #computerStateM_state{myNode = Node,computerNodes = ComputerNodes, computersArea = ComputersArea}}. %saves the area border
 
-initRobins() -> %spawn N/4 Robins
+initRobins(Node,ComputerNodes,ComputersArea) -> %spawn N/4 Robins
   Loop = lists:seq(1,?N div 4),
-  [erlang:monitor_node(spawn(batmanProtocol,start_link,[]),true)|| _<- Loop]. %spawn a Robin and monitor it
+  [erlang:monitor_node(spawn(moveSimulator,start_link,[Node,ComputerNodes,ComputersArea]),true)|| _<- Loop]. %spawn a Robin and monitor it
 
 %% @private
 %% @doc Handling call messages

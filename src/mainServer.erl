@@ -51,8 +51,8 @@ start_link(ComputerNodes,ComputersArea) ->
 
 init([{ComputerNodes,ComputersArea}]) ->
   ets:new(etsRobins,[set,public,named_table]), % Pid@Node -> {X,Y}
-%%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers
-%%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area
+%%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers todo
+%%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area todo
   spawnComputer(ComputerNodes,ComputersArea,loop),
 %%  register(test,spawn(test())),
   {ok, #mainServer_state{}}.
@@ -61,7 +61,7 @@ init([{ComputerNodes,ComputersArea}]) ->
 test()-> receive
            M-> io:format("im test: ~p~n",[M]), test()
                      after ?UpdateTime -> gen_server:call({global,amit@ubuntu},sendLocations),
-    %@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@change to multi call
+    %@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@TODO change to multi call
     test() %recursion call
          end.
 
