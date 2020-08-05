@@ -27,7 +27,7 @@
 %%%===================================================================
 
 %% @doc Spawns the server and registers the local name (unique)
--spec(start_link() ->
+-spec(start_link(Area::term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area]) ->
   gen_server:start_link( ?MODULE, [Area], []).
@@ -42,7 +42,7 @@ start_link([Area]) ->
   {ok, State :: #moveSimulator_state{}} | {ok, State :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([MyArea]) ->
-   spawn_link(batmanProtocol,start_link(),[]),  %creates batmanProtocol and link it to this process TODO: remove comment
+   spawn_link(batmanProtocol,start_link,[]),  %creates batmanProtocol and link it to this process TODO: remove comment
   {ok, #moveSimulator_state{myArea = MyArea}}.
 
 %% @private
