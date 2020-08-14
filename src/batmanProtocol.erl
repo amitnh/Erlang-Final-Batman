@@ -41,10 +41,7 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
   gen_server:start_link({global, ?MODULE}, ?MODULE, [], []),
-  receive
-    _->ok
-  after 2000 -> castPlease(batmanME)
-  end.
+  castPlease(batmanME).
 
 
 %%%===================================================================

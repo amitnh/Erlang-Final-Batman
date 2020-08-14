@@ -35,9 +35,7 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area]) ->
   gen_server:start_link( ?MODULE, [Area], []), %TODO change the name ?MODULE, it wont work with more then 1
-  receive
-  after 2000 -> castPlease(simulatorME)
-  end.
+  castPlease(moveSimulatorOnline).
 
 
 %%%===================================================================

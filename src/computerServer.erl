@@ -65,7 +65,7 @@ getArea([_|T1],[_|T2],MyNode) -> getArea(T1,T2,MyNode).
 
 initRobins(MyArea) -> %spawn N/4 Robins
   Loop = lists:seq(1,?N div 4),
-  [erlang:monitor(process,spawn(moveSimulator,start_link,[MyArea]),true)|| _<- Loop]. %spawn a Robin and monitor it
+  [erlang:monitor(process,spawn(moveSimulator,start_link,[[MyArea]]))|| _<- Loop]. %spawn a Robin and monitor it
 
 %% @private
 %% @doc Handling call messages
