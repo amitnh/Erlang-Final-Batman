@@ -35,6 +35,9 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area]) ->
   gen_server:start_link( ?MODULE, [Area], []), %TODO change the name ?MODULE, it wont work with more then 1
+  receive
+  after 2000-> ok
+  end,
   castPlease(moveSimulatorOnline).
 
 
@@ -48,7 +51,8 @@ start_link([Area]) ->
   {ok, State :: #moveSimulator_state{}} | {ok, State :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([MyArea]) ->
-   spawn_link(batmanProtocol,start_link,[]),  %creates batmanProtocol and link it to this process
+  batmanProtocol:start_link(),
+   %spawn_link(batmanProtocol,start_link,[]),  %creates batmanProtocol and link it to this process
   {ok, #moveSimulator_state{myArea = MyArea}}.
 
 %% @private

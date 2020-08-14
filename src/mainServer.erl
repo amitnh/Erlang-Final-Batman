@@ -63,8 +63,9 @@ init([{ComputerNodes,ComputersArea}]) ->
 spawnComputer(ComputerNodes,ComputersArea,loop) -> [spawnComputer(ComputerNodes,ComputersArea,Node) || Node<- ComputerNodes];
 % spawns a Computer at a specific node and monitors it
 spawnComputer(ComputerNodes,ComputersArea,Node) ->
-  spawn(Node, computerServer,start_link,[[ComputerNodes,ComputersArea]]), %builds a Computer at Node
-  erlang:monitor_node(Node,true). % makes the mainServer monitor the new computer at Node
+  erlang:monitor_node(Node,true),  % makes the mainServer monitor the new computer at Node todo maybe i dont have to ?
+  spawn(Node,computerServer,start_link,[[ComputerNodes,ComputersArea]]).
+%%  rpc:call(Node, computerServer,start_link,[[ComputerNodes,ComputersArea]]). %builds a Computer at Node
 
 
 

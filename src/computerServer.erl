@@ -35,6 +35,9 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([ComputerNodes,ComputersArea]) ->
   gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea], [{debug,[trace]}]),
+  receive
+    after 2000-> ok
+  end,
   castPlease(computerServerOnline). %%todo debug only
 
 
@@ -55,7 +58,7 @@ init([ComputerNodes,ComputersArea]) -> %gets the area of the computer, the borde
   ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   MyArea = getArea(ComputerNodes,ComputersArea,node()),
-  initRobins(MyArea),   %% spawn N/4 Robins
+  initRobins(MyArea),   %% spawn N/4 Robins and monitors them
   {ok, #computerStateM_state{computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea}}. %saves the area border
 
 % gets My Area from lists of nodes and areas
@@ -65,7 +68,11 @@ getArea([_|T1],[_|T2],MyNode) -> getArea(T1,T2,MyNode).
 
 initRobins(MyArea) -> %spawn N/4 Robins
   Loop = lists:seq(1,?N div 4),
-  [erlang:monitor(process,spawn(moveSimulator,start_link,[[MyArea]]))|| _<- Loop]. %spawn a Robin and monitor it
+%% [erlang:monitor(process,spawn(moveSimulator,start_link,[[MyArea]]))|| _<- Loop]. %spawn a Robin and monitor it
+  [spawn(moveSimulator,start_link,[[MyArea]])|| _<- Loop]. %spawn a Robin and monitor it
+
+
+
 
 %% @private
 %% @doc Handling call messages
