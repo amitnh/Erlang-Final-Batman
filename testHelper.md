@@ -3,7 +3,4 @@ c(mainServer).
 c(computerServer).
 c(batmanProtocol).
 c(moveSimulator).
-mainServer:start_link([amit@ubuntu],[{1,2,3,4}]).
-
-
-
+mainServer:start_link([amit@ubuntu],[{0,1000,0,1000}]).

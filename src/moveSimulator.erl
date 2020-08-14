@@ -20,7 +20,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(moveSimulator_state, {myArea}).
+-record(moveSimulator_state, {myArea,myX,myY}).
 
 
 %%test TODO delete
@@ -38,9 +38,10 @@ start_link([Area]) ->
   receive
   after 2000-> ok
   end,
-  castPlease(moveSimulatorOnline).
+  castPlease(moveSimulatorOnline),
+  random_movement().
 
-
+random_movement()->ok.
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -51,9 +52,27 @@ start_link([Area]) ->
   {ok, State :: #moveSimulator_state{}} | {ok, State :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([MyArea]) ->
-  batmanProtocol:start_link(),
-   %spawn_link(batmanProtocol,start_link,[]),  %creates batmanProtocol and link it to this process
-  {ok, #moveSimulator_state{myArea = MyArea}}.
+  batmanProtocol:start_link(), %creates batmanProtocol and link it to this process
+  {X,Y} = startLocation(MyArea), % put my new random location in the etsX and etsY
+  {ok, #moveSimulator_state{myArea = MyArea,myX = X,myY = Y}}.
+
+startLocation({StartX,EndX,StartY,EndY})->
+  LocationX = StartX + rand:uniform(EndX-StartX), %returns a random integer in the computer Area
+  LocationY = StartY + rand:uniform(EndY-StartY),
+  ListX = listToUpdate(ets:lookup(etsX,LocationX),LocationX),
+  ListY = listToUpdate(ets:lookup(etsY,LocationY),LocationY),
+  ets:insert(etsX,ListX),
+  ets:insert(etsY,ListY),
+  {LocationX,LocationY}; %return {X,Y} value
+startLocation(_)-> castPlease(errorInArea).
+
+%checks if the im the first one on that list in the ETS or not.
+%the ETS is build like this: [{Location1,[pid1,pid2...]},{Location2,[pid1,pid2...]},....]
+listToUpdate([],Location)-> [{Location,[self()]}];
+listToUpdate([{Location,List}],_)->[{Location,List ++ [self()]}].
+
+
+
 
 %% @private
 %% @doc Handling call messages

@@ -19,7 +19,7 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 20). % number of processes in all the program "Robins"
+-define(N, 2000). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 
 
@@ -55,6 +55,7 @@ start_link([ComputerNodes,ComputersArea]) ->
   {ok, State :: #computerStateM_state{}} | {ok, State :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([ComputerNodes,ComputersArea]) -> %gets the area of the computer, the borders.
+  %the ETS is build like this: [{Location1,[pid1,pid2...]},{Location2,[pid1,pid2...]},....]
   ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   MyArea = getArea(ComputerNodes,ComputersArea,node()),
@@ -70,7 +71,6 @@ initRobins(MyArea) -> %spawn N/4 Robins
   Loop = lists:seq(1,?N div 4),
 %% [erlang:monitor(process,spawn(moveSimulator,start_link,[[MyArea]]))|| _<- Loop]. %spawn a Robin and monitor it
   [spawn(moveSimulator,start_link,[[MyArea]])|| _<- Loop]. %spawn a Robin and monitor it
-
 
 
 

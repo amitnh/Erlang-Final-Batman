@@ -65,7 +65,6 @@ spawnComputer(ComputerNodes,ComputersArea,loop) -> [spawnComputer(ComputerNodes,
 spawnComputer(ComputerNodes,ComputersArea,Node) ->
   erlang:monitor_node(Node,true),  % makes the mainServer monitor the new computer at Node todo maybe i dont have to ?
   spawn(Node,computerServer,start_link,[[ComputerNodes,ComputersArea]]).
-%%  rpc:call(Node, computerServer,start_link,[[ComputerNodes,ComputersArea]]). %builds a Computer at Node
 
 
 
