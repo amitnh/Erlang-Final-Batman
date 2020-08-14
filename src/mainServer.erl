@@ -37,7 +37,8 @@
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputersArea-> [{startX,endX,startY,endY},...] size 4
 start_link(ComputerNodes,ComputersArea) ->
-    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}], [{debug,[trace]}]). %TODO delete trace
+    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}], [{debug,[trace]}]), %TODO delete trace
+    gen_server:cast({global, tal@ubuntu},{test,finishedStartLink}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -57,17 +58,12 @@ init([{ComputerNodes,ComputersArea}]) ->
   {ok, #mainServer_state{}}.
 
 %a process updateMainServer sends every UpdateTime mili secs the ETS tables to the main server
-test()-> receive
-           M-> io:format("im test: ~p~n",[M]), test(),
-                    % after ?UpdateTime -> gen_server:call({global,amit@ubuntu},sendLocations),
-    %@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@TODO change to multi call
-    test() %recursion call
-         end.
 
 %start server for computer for each node in the ComputerNodes list
 spawnComputer(ComputerNodes,ComputersArea,loop) -> [spawnComputer(ComputerNodes,ComputersArea,Node) || Node<- ComputerNodes];
 % spawns a Computer at a specific node and monitors it
-spawnComputer(ComputerNodes,ComputersArea,Node) ->   rpc:call(Node, computerServer,start_link,[ComputerNodes,ComputersArea]), %builds a Computer at Node
+spawnComputer(ComputerNodes,ComputersArea,Node) ->
+  spawn(Node, computerServer,start_link,[[ComputerNodes,ComputersArea]]), %builds a Computer at Node
   erlang:monitor_node(Node,true). % makes the mainServer monitor the new computer at Node
 
 
@@ -93,10 +89,7 @@ handle_call(_Request, _From, State = #mainServer_state{}) ->
   {stop, Reason :: term(), NewState :: #mainServer_state{}}).
 
 handle_cast({test,M}, State = #mainServer_state{}) ->
-  erlang:display("ulay ?"),
-  erlang:display(ulay3),
-  io:format(ulay4),
-  io:format("ulay 5: ~p~n",[M]),
+  io:format("mainServer got this MSG: ~p~n",[M]),
   {noreply, State};
 %regular ETS update from Node
 %EtsX and EtsY are lists of the original ETSes

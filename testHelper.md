@@ -5,3 +5,5 @@ c(batmanProtocol).
 c(moveSimulator).
 mainServer:start_link([amit@ubuntu],[{1,2,3,4}]).
 
+
+

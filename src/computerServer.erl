@@ -25,7 +25,7 @@
 
 -record(computerStateM_state, {computerNodes,computersArea, myArea}).
 %%test TODO delete
-castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}),castPlease(MSG).
+castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -35,10 +35,7 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}),castPlease(MS
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([ComputerNodes,ComputersArea]) ->
   gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea], [{debug,[trace]}]),
-  receive
-    after 2000 -> ok
-  end,
-  castPlease(computerServerME).
+  castPlease(computerServerOnline). %%todo debug only
 
 
 
