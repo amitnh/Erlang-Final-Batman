@@ -16,7 +16,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-  code_change/3]).
+  code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
 -define(N, 20). % number of processes in all the program "Robins"
@@ -24,7 +24,8 @@
 
 
 -record(computerStateM_state, {computerNodes,computersArea, myArea}).
-
+%%test TODO delete
+castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}),castPlease(MSG).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -33,7 +34,15 @@
 -spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([ComputerNodes,ComputersArea]) ->
-  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea], []).
+  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea], [{debug,[trace]}]),
+  receive
+    after 2000 -> ok
+  end,
+  castPlease(computerServerME).
+
+
+
+%%  {global, tal@ubuntu} ! banana3210. %" + node() + " im a computerServer with record: /n" + #computerStateM_state.
 
 
 %%%===================================================================

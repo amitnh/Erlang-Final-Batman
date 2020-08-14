@@ -16,7 +16,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-  code_change/3]).
+  code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
 
@@ -29,6 +29,8 @@
 -define(windowSize, 128). %% Define the size of the window. only sequance numbers in the window will be counted and saved
 -define(TTL, 40). %% Time To Live, travel distance of a message
 
+%%test TODO delete
+castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 
 %%%===================================================================
 %%% API
@@ -38,7 +40,12 @@
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link({global, ?MODULE}, ?MODULE, [], []),
+  receive
+    _->ok
+  after 2000 -> castPlease(batmanME)
+  end.
+
 
 %%%===================================================================
 %%% gen_server callbacks
