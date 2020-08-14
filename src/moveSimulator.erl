@@ -19,8 +19,8 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
-
--record(moveSimulator_state, {myArea,myX,myY}).
+-define(updateEts ,30). %how many time per secound to update the ETS's
+-record(moveSimulator_state, {startX,endX,startY,endY,myX,myY}).
 
 
 %%test TODO delete
@@ -34,14 +34,19 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(Area::term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area]) ->
-  gen_server:start_link( ?MODULE, [Area], []), %TODO change the name ?MODULE, it wont work with more then 1
+  {ok,Pid} = gen_server:start_link( ?MODULE, [Area], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
   receive
   after 2000-> ok
   end,
-  castPlease(moveSimulatorOnline),
-  random_movement().
+  castPlease(ets:tab2list(etsX)),
+  spawn(etsTimer(Pid)),
+  spawn(vectorTimer()).
 
-random_movement()->ok.
+etsTimer(P)->receive
+              after ?updateEts -> gen_server:cast(P,{updateEts})
+            end.
+vectorTimer()->ok.
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -51,26 +56,28 @@ random_movement()->ok.
 -spec(init(Args :: term()) ->
   {ok, State :: #moveSimulator_state{}} | {ok, State :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([MyArea]) ->
+init([{StartX,EndX,StartY,EndY}]) ->
   batmanProtocol:start_link(), %creates batmanProtocol and link it to this process
-  {X,Y} = startLocation(MyArea), % put my new random location in the etsX and etsY
-  {ok, #moveSimulator_state{myArea = MyArea,myX = X,myY = Y}}.
+  {X,Y} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
+  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,myX = X,myY = Y}};
+init(_)-> castPlease(errorInArea).
 
-startLocation({StartX,EndX,StartY,EndY})->
+%%---------------------------------------------------------------------------------------------------
+%startLocation, insert a new location in the etsX and etsY maps
+startLocation(StartX,EndX,StartY,EndY)->
   LocationX = StartX + rand:uniform(EndX-StartX), %returns a random integer in the computer Area
   LocationY = StartY + rand:uniform(EndY-StartY),
   ListX = listToUpdate(ets:lookup(etsX,LocationX),LocationX),
   ListY = listToUpdate(ets:lookup(etsY,LocationY),LocationY),
   ets:insert(etsX,ListX),
   ets:insert(etsY,ListY),
-  {LocationX,LocationY}; %return {X,Y} value
-startLocation(_)-> castPlease(errorInArea).
+  {LocationX,LocationY}. %return {X,Y} value
 
 %checks if the im the first one on that list in the ETS or not.
 %the ETS is build like this: [{Location1,[pid1,pid2...]},{Location2,[pid1,pid2...]},....]
 listToUpdate([],Location)-> [{Location,[self()]}];
 listToUpdate([{Location,List}],_)->[{Location,List ++ [self()]}].
-
+%%---------------------------------------------------------------------------------------------------
 
 
 
@@ -95,8 +102,8 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
 % if i was close to the border, but the border changed, the computerServer will update us by sending
 % updateArea cast msg, as following:
-handle_cast({updateArea,NewArea}, _) ->
-  {noreply, #moveSimulator_state{myArea = NewArea}};
+%%handle_cast({updateArea,NewArea}, _) -> todo later
+%%  {noreply, #moveSimulator_state{myArea = NewArea}};
 handle_cast(_Request, State = #moveSimulator_state{}) ->
   {noreply, State}.
 
