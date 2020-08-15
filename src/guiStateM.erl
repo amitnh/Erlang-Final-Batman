@@ -51,6 +51,10 @@ start_link() ->
 %% gen_statem:start_link/[3,4], this function is called by the new
 %% process to initialize.
 init([]) ->
+  % {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
+  ets:new(etsRobins,[set,public,named_table]),
+  ets:insert(etsRobins, [{pid1,{200,60}}, {pid2,{300,20}}, {pid3,{500,1000}}, {pid4,{40,800}}]),
+
   Env = wx:new(),     %%create a wx environment
   F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width,?Height}}]),  %Creates the main frame for the gui
   P = wxPanel:new(F, [{size, {?Width,?Height-100}}]), % a panel we will split with sizers
@@ -124,17 +128,9 @@ waiting(cast,paintnow,State = #guiStateM_state{}) ->
 waiting(cast, _, State = #guiStateM_state{}) ->
   {next_state, waiting, State}.
 
-paint(cast,dopaint,State = #guiStateM_state{canvas = C,env = Env}) ->
-  erlang:display("asd2"),
-
-  DC = wxPaintDC:new(C),
-  X=rand:uniform(10),
-  wxDC:clear(DC),
-  wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
-  wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
-  wxDC:drawCircle(DC, {200+X, 200-X}, 3),
-  wxDC:drawCircle(DC, {1+X, 2-X}, 3),
-  wxPaintDC:destroy(DC),
+paint(cast,dopaint,State = #guiStateM_state{canvas = C}) ->
+  spawn(fun()-> timer() end),
+  do_refresh(C),
   {next_state, paint, State};
 
 paint(cast, _, State = #guiStateM_state{}) ->
@@ -150,14 +146,26 @@ timer()->
   receive
     after ?RefreshRate -> gen_statem:cast({global, ?SERVER}, dopaint)
   end,
-  timer().
+  timer(),
+  erlang:display("I am timer").
+
+do_refresh(C)->
+  erlang:display("I am painter"),
+  EtsList = ets:tab2list(etsRobins),
+  DC = wxPaintDC:new(C),
+  Rand=rand:uniform(10),
+  wxDC:clear(DC),
+  wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
+  wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
+  [wxDC:drawCircle(DC, {X+Rand,Y+Rand}, 3) || {_,{X,Y}}<- EtsList],
+  wxPaintDC:destroy(DC).
 
 
 initcanvas(C) ->
   DC = wxPaintDC:new(C),
   Image = wxImage:new("image.jpg"),
   Image2 = wxImage:scale(Image, wxImage:getWidth(Image) div 3,
-    wxImage:getHeight(Image) div 3),
+  wxImage:getHeight(Image) div 3),
   Bmp = wxBitmap:new(Image2),
   wxImage:destroy(Image),
   wxImage:destroy(Image2),
