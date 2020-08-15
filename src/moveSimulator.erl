@@ -19,7 +19,7 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(updateEts ,30). %how many time per second to update the ETS's
+-define(updateEts ,20). %how many time per second to update the ETS's
 -define(velMax , 3). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 
@@ -110,17 +110,10 @@ updatedXYlocations(State)->
   Dir = State#moveSimulator_state.direction,
   CurrTime = erlang:system_time(millisecond),
   DeltaTime = CurrTime - State#moveSimulator_state.time,
-  castPlease(values),
-  castPlease(X0),
-  castPlease(Y0),
-  castPlease(Vel),
-  castPlease(Dir),
-  castPlease(DeltaTime),
 
   X = X0 + math:cos(Dir * math:pi() / 180)*Vel*DeltaTime/1000, % x = vt , trigo
   Y = Y0 + math:sin(Dir * math:pi() / 180)*Vel*DeltaTime/1000,
-  castPlease(X),
-  castPlease(Y),
+
   {X,Y,CurrTime}.
 %%---------------------------------------------------------------------------------------------------
 
@@ -150,34 +143,33 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 %%  {noreply, #moveSimulator_state{myArea = NewArea}};
 
 handle_cast({updateMovementVector,CurrTime,Velocity,Direction}, State = #moveSimulator_state{}) ->
-  castPlease(updateMovementVector),
-  castPlease(CurrTime),
-  castPlease(Velocity),
-  castPlease(Direction),
+%%  castPlease(updateMovementVector),
   {noreply, State#moveSimulator_state{time = CurrTime,velocity = Velocity, direction = Direction}};
 
 %updateEts updates the location of my PID in the etsX and etsY
 handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   {X,Y,CurrTime} = updatedXYlocations(State),
-  RoundedX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
-  RoundedY = round(State#moveSimulator_state.myY),
-  [{OldX,ListX}] = ets:lookup(etsX,RoundedX),
-  [{OldY,ListY}] = ets:lookup(etsY,RoundedY),
+  RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
+  RoundedOldY = round(State#moveSimulator_state.myY),
+  [{_,ListX}] = ets:lookup(etsX,RoundedOldX),
+  [{_,ListY}] = ets:lookup(etsY,RoundedOldY),
 %%  castPlease(ListX), %[<12630.114.0>] ->[{Location,[self()]}]
 
   OldListX = ListX -- [self()],% remove the pid from the old location
   OldListY = ListY -- [self()],
-  if (length(OldListX) > 0) ->  ets:insert(etsX,[{OldX,OldListX}]);%put back the old Locations lists if not empty
-    true-> ets:delete(etsX,OldX) % delete if empty
+  if (length(OldListX) > 0) ->  ets:insert(etsX,[{RoundedOldX,OldListX}]);%put back the old Locations lists if not empty
+    true-> ets:delete(etsX,RoundedOldX) % delete if empty
   end, %
-  if (length(OldListY) > 0) ->  ets:insert(etsY,[{OldY,OldListY}]);%put back the old Locations lists if not empty
-    true-> ets:delete(etsY,OldY) % delete if empty
+  if (length(OldListY) > 0) ->  ets:insert(etsY,[{RoundedOldY,OldListY}]);%put back the old Locations lists if not empty
+    true-> ets:delete(etsY,RoundedOldY) % delete if empty
   end,
 
-  [{_,NewListX}] = listToUpdate(ets:lookup(etsX,RoundedX),RoundedX),
-  [{_,NewListY}] = listToUpdate(ets:lookup(etsY,RoundedY),RoundedY),
-  ets:insert(etsX,[{RoundedX,NewListX}]), %insert the new Locations lists
-  ets:insert(etsY,[{RoundedY,NewListY}]),
+  RoundedNewX = round(X),
+  RoundedNewY = round(Y),
+  [{_,NewListX}] = listToUpdate(ets:lookup(etsX,RoundedNewX),RoundedNewX),
+  [{_,NewListY}] = listToUpdate(ets:lookup(etsY,RoundedNewY),RoundedNewY),
+  ets:insert(etsX,[{RoundedNewX,NewListX}]), %insert the new Locations lists
+  ets:insert(etsY,[{RoundedNewY,NewListY}]),
   {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}; % todo check if it works
 
 
