@@ -37,7 +37,7 @@
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputersArea-> [{startX,endX,startY,endY},...] size 4
 start_link(ComputerNodes,ComputersArea) ->
-    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}], [{debug,[trace]}]), %TODO delete trace
+    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}],[]),% [{debug,[trace]}]), %TODO delete trace
     gen_server:cast({global, tal@ubuntu},{test,finishedStartLink}).
 
 %%%===================================================================

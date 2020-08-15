@@ -19,9 +19,9 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(updateEts ,30). %how many time per second to update the ETS's
--define(velMax , 3000). %range of the random velocity of the node in meter/milisec
--define(timeRange ,{500,5000}). %range of the random time to change direction of the node in milisec
+-define(updateEts ,20). %how many time per second to update the ETS's
+-define(velMax , 3). %range of the random velocity of the node in meter/milisec
+-define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 
 -record(moveSimulator_state, {startX,endX,startY,endY,myX,myY,time,velocity,direction}).
 
@@ -38,15 +38,20 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area]) ->
   {ok,Pid} = gen_server:start_link( ?MODULE, [Area], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
-  receive
-  after 2000-> ok
-  end,
+  castPlease(moveSimulatorOnline),
+  spawn_link(fun()->etsTimer(Pid) end),
+  spawn_link(fun()->vectorTimer(Pid) end),
+  test().
+
+test()->
   castPlease(ets:tab2list(etsX)),
-  spawn_link(etsTimer(Pid)),
-  spawn_link(vectorTimer(Pid)).
+  castPlease(ets:tab2list(etsY)),
+        receive
+         after 2000-> test()
+         end.
 
 %send a cast to update the main ets's every ?updateEts milisecounds
-etsTimer(Pid)->TimeToWait = 1000/?updateEts, %time to wait for sending  ?updateEts msgs in 1 sec
+etsTimer(Pid)->TimeToWait = 1000 div ?updateEts, %time to wait for sending  ?updateEts msgs in 1 sec
             receive
               after TimeToWait -> gen_server:cast(Pid,{updateEts})
             end,
@@ -55,14 +60,15 @@ etsTimer(Pid)->TimeToWait = 1000/?updateEts, %time to wait for sending  ?updateE
 vectorTimer(Pid)->
   %this 3 are going to the vector (in the record):
   CurrTime = erlang:system_time(millisecond),
-  Velocity = rand:uniform(?velMax),
+  Velocity = rand:uniform(?velMax*1000)/1000,
   Direction = rand:uniform(360), % in degrees
 
-  {Min,Max} = ?timeRange, TimeToWait = Min + rand:uniform(Max-Min),
+  {Min,Max} = ?timeRange,
+  TimeToWait = Min + rand:uniform(Max-Min),
   gen_server:cast(Pid,{updateMovementVector,CurrTime,Velocity,Direction}),
   receive
-    after TimeToWait -> vectorTimer(Pid)
-  end.
+    after TimeToWait -> ok
+  end, vectorTimer(Pid).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -98,14 +104,16 @@ listToUpdate([{Location,List}],_Location)->[{Location,List ++ [self()]}].
 %% calculate the new locations of X and Y based on the random vector
 %%---------------------------------------------------------------------------------------------------
 updatedXYlocations(State)->
-  OldX = State#moveSimulator_state.myX,
-  OldY = State#moveSimulator_state.myY,
+  X0 = State#moveSimulator_state.myX,
+  Y0 = State#moveSimulator_state.myY,
   Vel = State#moveSimulator_state.velocity,
   Dir = State#moveSimulator_state.direction,
-  CurrTime = erlang:system_time(milliseconds),
+  CurrTime = erlang:system_time(millisecond),
   DeltaTime = CurrTime - State#moveSimulator_state.time,
-  X = OldX + math:cos(Dir * math:pi() / 180)*Vel*DeltaTime, % x = vt , trigo
-  Y = OldY + math:sin(Dir * math:pi() / 180)*Vel*DeltaTime,
+
+  X = X0 + math:cos(Dir * math:pi() / 180)*Vel*DeltaTime/1000, % x = vt , trigo
+  Y = Y0 + math:sin(Dir * math:pi() / 180)*Vel*DeltaTime/1000,
+
   {X,Y,CurrTime}.
 %%---------------------------------------------------------------------------------------------------
 
@@ -135,22 +143,33 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 %%  {noreply, #moveSimulator_state{myArea = NewArea}};
 
 handle_cast({updateMovementVector,CurrTime,Velocity,Direction}, State = #moveSimulator_state{}) ->
+%%  castPlease(updateMovementVector),
   {noreply, State#moveSimulator_state{time = CurrTime,velocity = Velocity, direction = Direction}};
 
 %updateEts updates the location of my PID in the etsX and etsY
 handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   {X,Y,CurrTime} = updatedXYlocations(State),
-  ListX = ets:lookup(etsX,State#moveSimulator_state.myX),
-    ListY = ets:lookup(etsY,State#moveSimulator_state.myY),
-  ListX = ListX -- [self()],% remove the pid from the old location
-  ListY = ListY -- [self()],
-  ets:insert(etsX,ListX), %put back the old Locations lists
-  ets:insert(etsY,ListY),
+  RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
+  RoundedOldY = round(State#moveSimulator_state.myY),
+  [{_,ListX}] = ets:lookup(etsX,RoundedOldX),
+  [{_,ListY}] = ets:lookup(etsY,RoundedOldY),
+%%  castPlease(ListX), %[<12630.114.0>] ->[{Location,[self()]}]
 
-  ListX = listToUpdate(ets:lookup(etsX,X),X),
-  ListY = listToUpdate(ets:lookup(etsY,Y),Y),
-  ets:insert(etsX,ListX), %insert the new Locations lists
-  ets:insert(etsY,ListY),
+  OldListX = ListX -- [self()],% remove the pid from the old location
+  OldListY = ListY -- [self()],
+  if (length(OldListX) > 0) ->  ets:insert(etsX,[{RoundedOldX,OldListX}]);%put back the old Locations lists if not empty
+    true-> ets:delete(etsX,RoundedOldX) % delete if empty
+  end, %
+  if (length(OldListY) > 0) ->  ets:insert(etsY,[{RoundedOldY,OldListY}]);%put back the old Locations lists if not empty
+    true-> ets:delete(etsY,RoundedOldY) % delete if empty
+  end,
+
+  RoundedNewX = round(X),
+  RoundedNewY = round(Y),
+  [{_,NewListX}] = listToUpdate(ets:lookup(etsX,RoundedNewX),RoundedNewX),
+  [{_,NewListY}] = listToUpdate(ets:lookup(etsY,RoundedNewY),RoundedNewY),
+  ets:insert(etsX,[{RoundedNewX,NewListX}]), %insert the new Locations lists
+  ets:insert(etsY,[{RoundedNewY,NewListY}]),
   {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}; % todo check if it works
 
 
