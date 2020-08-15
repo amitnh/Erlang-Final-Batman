@@ -121,15 +121,15 @@ state_name(star, _EventContent, State = #guiStateM_state{}) ->
   NextStateName = next_state,
   {next_state, NextStateName, State}.
 
-waiting(cast,paintnow,State = #guiStateM_state{}) ->
-  spawn_link(timer()),
-  {next_state, paint, State};
+%%waiting(cast,paintnow,State = #guiStateM_state{}) ->
+%%  spawn_link(timer()),
+%%  {next_state, paint, State};
 
 waiting(cast, _, State = #guiStateM_state{}) ->
   {next_state, waiting, State}.
 
-paint(cast,dopaint,State = #guiStateM_state{canvas = C}) ->
-  spawn(fun()-> timer() end),
+paint(cast,refresh,State = #guiStateM_state{canvas = C}) ->
+
   do_refresh(C),
   {next_state, paint, State};
 
@@ -138,26 +138,25 @@ paint(cast, _, State = #guiStateM_state{}) ->
 
 
 handle_click(#wx{obj = _, userData = #{text := T, env := Env}},_Event) ->
+  spawn(fun()-> timer() end),
   wx:set_env(Env),
   wxStaticText:setLabel(T, "Running.."),
-  gen_statem:cast({global, ?SERVER}, dopaint).
+  gen_statem:cast({global, ?SERVER}, refresh).
 
 timer()->
   receive
-    after ?RefreshRate -> gen_statem:cast({global, ?SERVER}, dopaint)
+    after ?RefreshRate -> gen_statem:cast({global, ?SERVER}, refresh)
   end,
-  timer(),
-  erlang:display("I am timer").
+  timer().
 
 do_refresh(C)->
-  erlang:display("I am painter"),
   EtsList = ets:tab2list(etsRobins),
   DC = wxPaintDC:new(C),
-  Rand=rand:uniform(10),
   wxDC:clear(DC),
   wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
   wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
-  [wxDC:drawCircle(DC, {X+Rand,Y+Rand}, 3) || {_,{X,Y}}<- EtsList],
+  Rand=rand:uniform(10),
+  [wxDC:drawCircle(DC, {X,Y}, 3) || {_,{X,Y}}<- EtsList],
   wxPaintDC:destroy(DC).
 
 
