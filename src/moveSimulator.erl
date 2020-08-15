@@ -19,8 +19,11 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(updateEts ,30). %how many time per secound to update the ETS's
--record(moveSimulator_state, {startX,endX,startY,endY,myX,myY}).
+-define(updateEts ,30). %how many time per second to update the ETS's
+-define(velMax , 3). %range of the random velocity of the node in meter/sec
+-define(timeRange ,{500,5000}). %range of the random time to change direction of the node in milisec
+
+-record(moveSimulator_state, {startX,endX,startY,endY,myX,myY,time,velocity,direction}).
 
 
 %%test TODO delete
@@ -42,10 +45,15 @@ start_link([Area]) ->
   spawn(etsTimer(Pid)),
   spawn(vectorTimer()).
 
-etsTimer(P)->receive
-              after ?updateEts -> gen_server:cast(P,{updateEts})
+%send a cast to update the main ets's every ?updateEts milisecounds
+etsTimer(Pid)->TimeToWait = 1000/?updateEts, %time to wait for sending  ?updateEts msgs in 1 sec
+            receive
+              after TimeToWait -> gen_server:cast(Pid,{updateEts})
             end.
-vectorTimer()->ok.
+%update the random velocity,direction and updatetime to update
+vectorTimer()->receive
+               after TimeToWait -> gen_server:cast(Pid,{updateEts})
+               end.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -59,7 +67,7 @@ vectorTimer()->ok.
 init([{StartX,EndX,StartY,EndY}]) ->
   batmanProtocol:start_link(), %creates batmanProtocol and link it to this process
   {X,Y} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
-  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,myX = X,myY = Y}};
+  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0}};
 init(_)-> castPlease(errorInArea).
 
 %%---------------------------------------------------------------------------------------------------
@@ -76,7 +84,7 @@ startLocation(StartX,EndX,StartY,EndY)->
 %checks if the im the first one on that list in the ETS or not.
 %the ETS is build like this: [{Location1,[pid1,pid2...]},{Location2,[pid1,pid2...]},....]
 listToUpdate([],Location)-> [{Location,[self()]}];
-listToUpdate([{Location,List}],_)->[{Location,List ++ [self()]}].
+listToUpdate([{Location,List}],_Location)->[{Location,List ++ [self()]}].
 %%---------------------------------------------------------------------------------------------------
 
 
@@ -104,6 +112,24 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 % updateArea cast msg, as following:
 %%handle_cast({updateArea,NewArea}, _) -> todo later
 %%  {noreply, #moveSimulator_state{myArea = NewArea}};
+
+%updateEts updates the location of my PID in the etsX and etsY
+handle_cast({updateEts}, State = #moveSimulator_state{}) ->
+  {X,Y} = updatedXYlocations(), %todo implement
+  ListX = ets:lookup(etsX,State#moveSimulator_state.myX),
+    ListY = ets:lookup(etsY,State#moveSimulator_state.myY),
+  ListX = ListX -- [self()],% remove the pid from the old location
+  ListY = ListY -- [self()],
+  ets:insert(etsX,ListX), %put back the old Locations lists
+  ets:insert(etsY,ListY),
+
+  ListX = listToUpdate(ets:lookup(etsX,X),X),
+  ListY = listToUpdate(ets:lookup(etsY,Y),Y),
+  ets:insert(etsX,ListX), %insert the new Locations lists
+  ets:insert(etsY,ListY),
+  {noreply, #moveSimulator_state{myX = X,myY = Y}}; % todo check if it works
+
+
 handle_cast(_Request, State = #moveSimulator_state{}) ->
   {noreply, State}.
 
