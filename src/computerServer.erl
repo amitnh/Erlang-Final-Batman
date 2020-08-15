@@ -21,6 +21,7 @@
 -define(SERVER, ?MODULE).
 -define(N, 20). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
+-define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
 
 -record(computerStateM_state, {computerNodes,computersArea, myArea}).
@@ -36,10 +37,14 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 start_link([ComputerNodes,ComputersArea]) ->
   gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[]),% [{debug,[trace]}]),
   receive
-    after 2000-> ok
+    after 500-> ok
   end,
+  spawn_link(fun()->updateMainServerEts() end),
   castPlease(computerServerOnline). %%todo debug only
 
+updateMainServerEts()-> receive
+                          after 1000 div ?updateMainEts -> gen_server:cast({global, tal@ubuntu},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})
+                        end, updateMainServerEts().
 
 
 %%  {global, tal@ubuntu} ! banana3210. %" + node() + " im a computerServer with record: /n" + #computerStateM_state.

@@ -82,6 +82,24 @@ spawnComputer(ComputerNodes,ComputersArea,Node) ->
 handle_call(_Request, _From, State = #mainServer_state{}) ->
   {reply, ok, State}.
 
+
+
+
+
+%takes a list of pids from ETSX or ETSY, and updates their location in the ETSROBINS
+updateEts(_,[],_,_)-> ok;
+updateEts(Location,[Pid|Rest],XorY,From)-> IsMember = ets:member(etsRobins,{Pid,From}),
+  erlang:display(IsMember),
+  if  IsMember -> [{_FromTuple,{X,Y}}] = ets:lookup(etsRobins,{Pid,From}), %if Robins already a member
+      if XorY == x -> ets:insert(etsRobins,{{Pid,From},{Location,Y}});
+        true -> ets:insert(etsRobins,{{Pid,From},{X,Location}})
+      end;
+      true-> ets:insert(etsRobins,{{Pid,From},{Location,Location}}) %if Robins is not a member, he is new
+    end,
+  updateEts(Location,Rest,XorY,From). %recursion call
+
+
+
 %% @private
 %% @doc Handling cast messages
 -spec(handle_cast(Request :: term(), State :: #mainServer_state{}) ->
@@ -89,14 +107,23 @@ handle_call(_Request, _From, State = #mainServer_state{}) ->
   {noreply, NewState :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #mainServer_state{}}).
 
+
+
 handle_cast({test,M}, State = #mainServer_state{}) ->
   io:format("mainServer got this MSG: ~p~n",[M]),
   {noreply, State};
 %regular ETS update from Node
 %EtsX and EtsY are lists of the original ETSes
-handle_cast({location,Node,EtsX,EtsY}, State = #mainServer_state{}) ->
-  test ! {location,Node,EtsX,EtsY},
+handle_cast({etsUpdate,From,EtsX,EtsY}, State = #mainServer_state{}) ->
+  spawn(fun()-> [updateEts(X,PidList,x,From)||{X,PidList}<-EtsX],
+    [updateEts(Y,PidList,y,From)||{Y,PidList}<-EtsY] end),
+
+  erlang:display(ets:tab2list(etsRobins)),
+
   {noreply, State};
+
+
+
 
 handle_cast(_Request, State = #mainServer_state{}) ->
   {noreply, State}.
