@@ -52,8 +52,8 @@ start_link() ->
 %% process to initialize.
 init([]) ->
   % {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
-  ets:new(etsRobins,[set,public,named_table]),
-  ets:insert(etsRobins, [{pid1,{200,60}}, {pid2,{300,20}}, {pid3,{500,1000}}, {pid4,{40,800}}]),
+%%  ets:new(etsRobins,[set,public,named_table]),
+%%  ets:insert(etsRobins, [{pid1,{200,60}}, {pid2,{300,20}}, {pid3,{500,1000}}, {pid4,{40,800}}]),
 
   Env = wx:new(),     %%create a wx environment
   F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width,?Height}}]),  %Creates the main frame for the gui

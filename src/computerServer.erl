@@ -19,7 +19,7 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 2000). % number of processes in all the program "Robins"
+-define(N, 20). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 
 

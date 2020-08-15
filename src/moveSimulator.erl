@@ -40,8 +40,8 @@ start_link([Area]) ->
   {ok,Pid} = gen_server:start_link( ?MODULE, [Area], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
   castPlease(moveSimulatorOnline),
   spawn_link(fun()->etsTimer(Pid) end),
-  spawn_link(fun()->vectorTimer(Pid) end),
-  test().
+  spawn_link(fun()->vectorTimer(Pid) end).
+%%  test().
 
 test()->
   castPlease(ets:tab2list(etsX)),
