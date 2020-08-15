@@ -16,13 +16,16 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-  code_change/3]).
+  code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 20). % number of processes in all the program "Robins"
+-define(N, 2000). % number of processes in all the program "Robins"
+-define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 
--record(computerStateM_state, {}).
 
+-record(computerStateM_state, {computerNodes,computersArea, myArea}).
+%%test TODO delete
+castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -30,10 +33,16 @@
 %% @doc Spawns the server and registers the local name (unique)
 -spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link([Node,ComputerNodes,ComputersArea]) ->
-  gen_server:start_link({global, Node}, ?MODULE, [], []).
+start_link([ComputerNodes,ComputersArea]) ->
+  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea], [{debug,[trace]}]),
+  receive
+    after 2000-> ok
+  end,
+  castPlease(computerServerOnline). %%todo debug only
 
 
+
+%%  {global, tal@ubuntu} ! banana3210. %" + node() + " im a computerServer with record: /n" + #computerStateM_state.
 
 
 %%%===================================================================
@@ -45,15 +54,25 @@ start_link([Node,ComputerNodes,ComputersArea]) ->
 -spec(init(Args :: term()) ->
   {ok, State :: #computerStateM_state{}} | {ok, State :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([]) ->
+init([ComputerNodes,ComputersArea]) -> %gets the area of the computer, the borders.
+  %the ETS is build like this: [{Location1,[pid1,pid2...]},{Location2,[pid1,pid2...]},....]
   ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
-  initRobins(),   %% spawn N/4 Robins
-  {ok, #computerStateM_state{}}.
+  MyArea = getArea(ComputerNodes,ComputersArea,node()),
+  initRobins(MyArea),   %% spawn N/4 Robins and monitors them
+  {ok, #computerStateM_state{computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea}}. %saves the area border
 
-initRobins() -> %spawn N/4 Robins
+% gets My Area from lists of nodes and areas
+getArea([],[],_)-> areaCantBeFound;
+getArea([MyNode|_],[Area|_],MyNode) -> Area;
+getArea([_|T1],[_|T2],MyNode) -> getArea(T1,T2,MyNode).
+
+initRobins(MyArea) -> %spawn N/4 Robins
   Loop = lists:seq(1,?N div 4),
-  [erlang:monitor_node(spawn(batmanProtocol,start_link,[]),true)|| _<- Loop]. %spawn a Robin and monitor it
+%% [erlang:monitor(process,spawn(moveSimulator,start_link,[[MyArea]]))|| _<- Loop]. %spawn a Robin and monitor it
+  [spawn(moveSimulator,start_link,[[MyArea]])|| _<- Loop]. %spawn a Robin and monitor it
+
+
 
 %% @private
 %% @doc Handling call messages

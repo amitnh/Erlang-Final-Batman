@@ -37,7 +37,8 @@
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputersArea-> [{startX,endX,startY,endY},...] size 4
 start_link(ComputerNodes,ComputersArea) ->
-    gen_server:start_link({global, ?SERVER}, ?MODULE, [{ComputerNodes,ComputersArea}], []).
+    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}], [{debug,[trace]}]), %TODO delete trace
+    gen_server:cast({global, tal@ubuntu},{test,finishedStartLink}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -50,26 +51,21 @@ start_link(ComputerNodes,ComputersArea) ->
   {stop, Reason :: term()} | ignore).
 
 init([{ComputerNodes,ComputersArea}]) ->
-  ets:new(etsRobins,[set,public,named_table]), % Pid@Node -> {X,Y}
-%%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers
-%%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area
+  % {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
+  ets:new(etsRobins,[set,public,named_table]),
+%%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers todo
+%%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area todo
   spawnComputer(ComputerNodes,ComputersArea,loop),
-%%  register(test,spawn(test())),
   {ok, #mainServer_state{}}.
 
 %a process updateMainServer sends every UpdateTime mili secs the ETS tables to the main server
-test()-> receive
-           M-> io:format("im test: ~p~n",[M]), test()
-                     after ?UpdateTime -> gen_server:call({global,amit@ubuntu},sendLocations),
-    %@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@change to multi call
-    test() %recursion call
-         end.
 
 %start server for computer for each node in the ComputerNodes list
 spawnComputer(ComputerNodes,ComputersArea,loop) -> [spawnComputer(ComputerNodes,ComputersArea,Node) || Node<- ComputerNodes];
 % spawns a Computer at a specific node and monitors it
-spawnComputer(ComputerNodes,ComputersArea,Node) ->   rpc:call(Node, computerServer,start_link,[Node,ComputerNodes,ComputersArea]), %builds a Computer at Node
-  erlang:monitor_node(Node,true). % makes the mainServer monitor the new computer at Node
+spawnComputer(ComputerNodes,ComputersArea,Node) ->
+  erlang:monitor_node(Node,true),  % makes the mainServer monitor the new computer at Node todo maybe i dont have to ?
+  spawn(Node,computerServer,start_link,[[ComputerNodes,ComputersArea]]).
 
 
 
@@ -93,6 +89,9 @@ handle_call(_Request, _From, State = #mainServer_state{}) ->
   {noreply, NewState :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #mainServer_state{}}).
 
+handle_cast({test,M}, State = #mainServer_state{}) ->
+  io:format("mainServer got this MSG: ~p~n",[M]),
+  {noreply, State};
 %regular ETS update from Node
 %EtsX and EtsY are lists of the original ETSes
 handle_cast({location,Node,EtsX,EtsY}, State = #mainServer_state{}) ->
