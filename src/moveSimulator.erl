@@ -50,11 +50,11 @@ etsTimer(Pid)->TimeToWait = 1000/?updateEts, %time to wait for sending  ?updateE
             receive
               after TimeToWait -> gen_server:cast(Pid,{updateEts})
             end,
-            etsTime(Pid).
+            etsTimer(Pid).
 %update the random velocity,direction and updatetime to update
 vectorTimer(Pid)->
   %this 3 are going to the vector (in the record):
-  CurrTime = system_time(millisecond),
+  CurrTime = erlang:system_time(millisecond),
   Velocity = rand:uniform(?velMax),
   Direction = rand:uniform(360), % in degrees
 
@@ -95,16 +95,16 @@ startLocation(StartX,EndX,StartY,EndY)->
 listToUpdate([],Location)-> [{Location,[self()]}];
 listToUpdate([{Location,List}],_Location)->[{Location,List ++ [self()]}].
 %%---------------------------------------------------------------------------------------------------
-%% calculate the new locations of X and Y based on the vector
+%% calculate the new locations of X and Y based on the random vector
 %%---------------------------------------------------------------------------------------------------
 updatedXYlocations(State)->
   OldX = State#moveSimulator_state.myX,
   OldY = State#moveSimulator_state.myY,
   Vel = State#moveSimulator_state.velocity,
   Dir = State#moveSimulator_state.direction,
-  CurrTime = erlang:system_time(milliseconds)
+  CurrTime = erlang:system_time(milliseconds),
   DeltaTime = CurrTime - State#moveSimulator_state.time,
-  X = OldX + math:cos(Dir * math:pi() / 180)*Vel*DeltaTime,
+  X = OldX + math:cos(Dir * math:pi() / 180)*Vel*DeltaTime, % x = vt , trigo
   Y = OldY + math:sin(Dir * math:pi() / 180)*Vel*DeltaTime,
   {X,Y,CurrTime}.
 %%---------------------------------------------------------------------------------------------------
@@ -152,8 +152,6 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   ets:insert(etsX,ListX), %insert the new Locations lists
   ets:insert(etsY,ListY),
   {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}; % todo check if it works
-
-
 
 
 handle_cast(_Request, State = #moveSimulator_state{}) ->
