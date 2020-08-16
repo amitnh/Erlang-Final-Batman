@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -21,7 +21,9 @@
 -define(SERVER, ?MODULE).
 
 %%%===================================================================
--record(batmanProtocol_state, {known}).
+-record(batmanProtocol_state, {known,pid}).
+%% pid - the pid of my moveSimulator for putting it inside OGM / MSG
+%% --
 %% known is a map of known Robins in the system
 %% each Robin contains map of neighbors Pid that he received messages from
 %% each neighbor contain a sorted list of Relevant (in-window) sequence numbers for the relevant Robin
@@ -37,10 +39,10 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
 
 %% @doc Spawns the server and registers the local name (unique)
--spec(start_link() ->
+-spec(start_link(PidMoveSimulator) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-  gen_server:start_link({global, ?MODULE}, ?MODULE, [], []),
+start_link(PidMoveSimulator) ->
+  gen_server:start_link(?MODULE, [PidMoveSimulator], []),
   receive
   after 2000-> ok
   end.
@@ -56,8 +58,8 @@ start_link() ->
 -spec(init(Args :: term()) ->
   {ok, State :: #batmanProtocol_state{}} | {ok, State :: #batmanProtocol_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([]) ->
-  {ok, #batmanProtocol_state{known = maps:new()}}. %return a new empty map of known Robins
+init([PidMoveSimulator]) ->
+  {ok, #batmanProtocol_state{known = maps:new(),pid = PidMoveSimulator}}. %return a new empty map of known Robins
 
 ogmLoop()-> receive
               after 1000-> sendOGM %TODO sendOGM function -> call get negibors from moveSimulator and sends tem the message

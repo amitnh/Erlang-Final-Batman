@@ -41,14 +41,6 @@ start_link([Area]) ->
 %%  castPlease(moveSimulatorOnline),
   spawn_link(fun()->etsTimer(Pid) end),
   spawn_link(fun()->vectorTimer(Pid) end).
-%%  test().
-
-test()->
-  castPlease(ets:tab2list(etsX)),
-  castPlease(ets:tab2list(etsY)),
-        receive
-         after 2000-> test()
-         end.
 
 %send a cast to update the main ets's every ?updateEts milisecounds
 etsTimer(Pid)->TimeToWait = 1000 div ?updateEts, %time to wait for sending  ?updateEts msgs in 1 sec
@@ -80,7 +72,7 @@ vectorTimer(Pid)->
   {ok, State :: #moveSimulator_state{}} | {ok, State :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([{StartX,EndX,StartY,EndY}]) ->
-  batmanProtocol:start_link(), %creates batmanProtocol and link it to this process
+  batmanProtocol:start_link(self()), %creates batmanProtocol and link it to this process
   {X,Y} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
   {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0}};
 init(_)-> castPlease(errorInArea).
@@ -177,7 +169,13 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   ets:insert(etsY,[{RoundedNewY,NewListY}]),
   {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}; % todo check if it works
 
-
+handle_cast({sendOGM,OGM}, State = #moveSimulator_state{}) ->
+  ListOfRobins = robinsInRadius().
+  {noreply, State};
+handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
+  {noreply, State};
+handle_cast({sendToBatman,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
+{noreply, State};
 handle_cast(_Request, State = #moveSimulator_state{}) ->
   {noreply, State}.
 
