@@ -56,9 +56,9 @@ init([]) ->
 %%  ets:insert(etsRobins, [{pid1,{200,60}}, {pid2,{300,20}}, {pid3,{500,1000}}, {pid4,{40,800}}]),
 
   Env = wx:new(),     %%create a wx environment
-  F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width,?Height}}]),  %Creates the main frame for the gui
+  F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width+100,?Height}}]),  %Creates the main frame for the gui
   P = wxPanel:new(F, [{size, {?Width,?Height-100}}]), % a panel we will split with sizers
-  C = wxPanel:new(P, [{style, ?wxFULL_REPAINT_ON_RESIZE}]), %the main canvas to print on the points
+  C = wxPanel:new(P, [{style, ?wxFULL_REPAINT_ON_RESIZE},{size, {?Width,?Height-100}}]), %the main canvas to print on the points
   MainSizer = wxBoxSizer:new(?wxVERTICAL),      %main sizer for alignment within the panel
   Sizer = wxStaticBoxSizer:new(?wxVERTICAL, P, [{label, "Batman bounderies"}]), %inside frame for batman protocol display
   T = wxStaticText:new(P, -1, "Click to start",[]),
@@ -80,9 +80,9 @@ init([]) ->
 
   %Frame is ready for display
 
-  initcanvas(C),
+%%  initcanvas(C),
   wxFrame:show(F),
-  {ok, paint, #guiStateM_state{env = Env, canvas = C,frame = F,panel = P,text = T}}.
+  {ok, waiting, #guiStateM_state{env = Env, canvas = C,frame = F,panel = P,text = T}}.
 
 
 
@@ -121,9 +121,9 @@ state_name(star, _EventContent, State = #guiStateM_state{}) ->
   NextStateName = next_state,
   {next_state, NextStateName, State}.
 
-%%waiting(cast,paintnow,State = #guiStateM_state{}) ->
-%%  spawn_link(timer()),
-%%  {next_state, paint, State};
+waiting(cast,paintnow,State = #guiStateM_state{}) ->
+  spawn(fun()-> timer() end),
+  {next_state, paint, State};
 
 waiting(cast, _, State = #guiStateM_state{}) ->
   {next_state, waiting, State}.
@@ -138,10 +138,9 @@ paint(cast, _, State = #guiStateM_state{}) ->
 
 
 handle_click(#wx{obj = _, userData = #{text := T, env := Env}},_Event) ->
-  spawn(fun()-> timer() end),
   wx:set_env(Env),
   wxStaticText:setLabel(T, "Running.."),
-  gen_statem:cast({global, ?SERVER}, refresh).
+  gen_statem:cast({global, ?SERVER}, paintnow).
 
 timer()->
   receive
@@ -152,26 +151,31 @@ timer()->
 do_refresh(C)->
   EtsList = ets:tab2list(etsRobins),
   DC = wxPaintDC:new(C),
-  wxDC:clear(DC),
+
   wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
   wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
-  Rand=rand:uniform(10),
-  [wxDC:drawCircle(DC, {X,Y}, 3) || {_,{X,Y}}<- EtsList],
-  wxPaintDC:destroy(DC).
-
-
-initcanvas(C) ->
-  DC = wxPaintDC:new(C),
-  Image = wxImage:new("image.jpg"),
-  Image2 = wxImage:scale(Image, wxImage:getWidth(Image) div 3,
-  wxImage:getHeight(Image) div 3),
-  Bmp = wxBitmap:new(Image2),
-  wxImage:destroy(Image),
-  wxImage:destroy(Image2),
-
   wxDC:clear(DC),
-  wxBitmap:destroy(Bmp),
+  wxDC:drawRectangle(DC,{0,0},{1000,1000}),
+  wxDC:drawLine(DC,{500,0},{500,1000}),
+  wxDC:drawLine(DC,{0,500},{1000,500}),
+  wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),
+  [wxDC:drawCircle(DC, {X div 2,Y div 2}, 3) || {_,{X,Y}}<- EtsList],
   wxPaintDC:destroy(DC).
+
+
+%%initcanvas(C) ->ok.
+%%%%  DC = wxPaintDC:new(C),
+%%%%  Image = wxImage:new("image.jpg"),
+%%%%%%  Image2 = wxImage:scale(Image, wxImage:getWidth(Image) div 3,
+%%%%%%  wxImage:getHeight(Image) div 3),
+%%%%  Image2 = wxImage:scale(Image, ?Width,?Height-100),
+%%%%  Bmp = wxBitmap:new(Image2),
+%%%%  wxImage:destroy(Image),
+%%%%  wxImage:destroy(Image2),
+%%%%
+%%%%  wxDC:clear(DC),
+%%%%  wxBitmap:destroy(Bmp),
+%%%%  wxPaintDC:destroy(DC).
 
 
 

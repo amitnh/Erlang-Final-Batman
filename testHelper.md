@@ -3,4 +3,6 @@ c(mainServer).
 c(computerServer).
 c(batmanProtocol).
 c(moveSimulator).
-mainServer:start_link([amit@ubuntu],[{0,1000,0,1000}]).
+c(guiStateM).
+mainServer:start_link([amit@ubuntu],[{950,1050,950,1050}]).
+guiStateM:start_link().

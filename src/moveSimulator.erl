@@ -20,7 +20,7 @@
 
 -define(SERVER, ?MODULE).
 -define(updateEts ,20). %how many time per second to update the ETS's
--define(velMax , 3). %range of the random velocity of the node in meter/milisec
+-define(velMax , 100). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 
 -record(moveSimulator_state, {startX,endX,startY,endY,myX,myY,time,velocity,direction}).
@@ -38,7 +38,7 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area]) ->
   {ok,Pid} = gen_server:start_link( ?MODULE, [Area], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
-  castPlease(moveSimulatorOnline),
+%%  castPlease(moveSimulatorOnline),
   spawn_link(fun()->etsTimer(Pid) end),
   spawn_link(fun()->vectorTimer(Pid) end).
 %%  test().
@@ -151,9 +151,14 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   {X,Y,CurrTime} = updatedXYlocations(State),
   RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
   RoundedOldY = round(State#moveSimulator_state.myY),
-  [{_,ListX}] = ets:lookup(etsX,RoundedOldX),
-  [{_,ListY}] = ets:lookup(etsY,RoundedOldY),
-%%  castPlease(ListX), %[<12630.114.0>] ->[{Location,[self()]}]
+  Tempx = ets:lookup(etsX,RoundedOldX),
+  Tempy= ets:lookup(etsY,RoundedOldY),
+  if length(Tempx)>0 -> [{_,ListX}]= Tempx; %check if lookup is empty
+      true-> ListX =[]
+   end,
+  if length(Tempy)>0 -> [{_,ListY}]= Tempy;
+    true-> ListY =[]
+  end,
 
   OldListX = ListX -- [self()],% remove the pid from the old location
   OldListY = ListY -- [self()],

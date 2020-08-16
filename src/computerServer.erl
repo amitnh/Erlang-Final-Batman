@@ -19,7 +19,7 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 20). % number of processes in all the program "Robins"
+-define(N, 2000). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
@@ -39,8 +39,8 @@ start_link([ComputerNodes,ComputersArea]) ->
   receive
     after 500-> ok
   end,
-  spawn_link(fun()->updateMainServerEts() end),
-  castPlease(computerServerOnline). %%todo debug only
+  spawn_link(fun()->updateMainServerEts() end).
+%%  castPlease(computerServerOnline). %%todo debug only
 
 updateMainServerEts()-> receive
                           after 1000 div ?updateMainEts -> gen_server:cast({global, tal@ubuntu},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})

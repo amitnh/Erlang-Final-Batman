@@ -43,8 +43,8 @@ start_link() ->
   gen_server:start_link({global, ?MODULE}, ?MODULE, [], []),
   receive
   after 2000-> ok
-  end,
-  castPlease(batmanME).
+  end.
+%%  castPlease(batmanME).
 
 
 %%%===================================================================

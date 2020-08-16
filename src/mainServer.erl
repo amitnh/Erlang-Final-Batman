@@ -89,7 +89,6 @@ handle_call(_Request, _From, State = #mainServer_state{}) ->
 %takes a list of pids from ETSX or ETSY, and updates their location in the ETSROBINS
 updateEts(_,[],_,_)-> ok;
 updateEts(Location,[Pid|Rest],XorY,From)-> IsMember = ets:member(etsRobins,{Pid,From}),
-  erlang:display(IsMember),
   if  IsMember -> [{_FromTuple,{X,Y}}] = ets:lookup(etsRobins,{Pid,From}), %if Robins already a member
       if XorY == x -> ets:insert(etsRobins,{{Pid,From},{Location,Y}});
         true -> ets:insert(etsRobins,{{Pid,From},{X,Location}})
@@ -117,9 +116,6 @@ handle_cast({test,M}, State = #mainServer_state{}) ->
 handle_cast({etsUpdate,From,EtsX,EtsY}, State = #mainServer_state{}) ->
   spawn(fun()-> [updateEts(X,PidList,x,From)||{X,PidList}<-EtsX],
     [updateEts(Y,PidList,y,From)||{Y,PidList}<-EtsY] end),
-
-  erlang:display(ets:tab2list(etsRobins)),
-
   {noreply, State};
 
 
