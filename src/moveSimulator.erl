@@ -22,8 +22,9 @@
 -define(updateEts ,20). %how many time per second to update the ETS's
 -define(velMax , 100). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
+-define(radius ,100).
 
--record(moveSimulator_state, {startX,endX,startY,endY,myX,myY,time,velocity,direction}).
+-record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction}).
 
 
 %%test TODO delete
@@ -34,10 +35,10 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
 
 %% @doc Spawns the server and registers the local name (unique)
--spec(start_link(Area::term()) ->
+-spec(start_link(Area::term(),DemiZone::term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link([Area]) ->
-  {ok,Pid} = gen_server:start_link( ?MODULE, [Area], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
+start_link([Area,DemiZone]) ->
+  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
 %%  castPlease(moveSimulatorOnline),
   spawn_link(fun()->etsTimer(Pid) end),
   spawn_link(fun()->vectorTimer(Pid) end).
@@ -71,10 +72,10 @@ vectorTimer(Pid)->
 -spec(init(Args :: term()) ->
   {ok, State :: #moveSimulator_state{}} | {ok, State :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([{StartX,EndX,StartY,EndY}]) ->
+init([{StartX,EndX,StartY,EndY},DemiZone]) ->
   batmanProtocol:start_link(self()), %creates batmanProtocol and link it to this process
   {X,Y} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
-  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0}};
+  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0}};
 init(_)-> castPlease(errorInArea).
 
 %%---------------------------------------------------------------------------------------------------
@@ -170,7 +171,7 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}; % todo check if it works
 
 handle_cast({sendOGM,OGM}, State = #moveSimulator_state{}) ->
-  ListOfRobins = robinsInRadius().
+  ListOfRobins = robinsInRadius(State).
   {noreply, State};
 handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
   {noreply, State};
@@ -210,3 +211,32 @@ code_change(_OldVsn, State = #moveSimulator_state{}, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+robinsInRadius(State) ->
+  MyX = State#moveSimulator_state.myX,
+  MyY = State#moveSimulator_state.myY,
+  DemiZone = State#moveSimulator_state.demiZone,
+  getRobinsInradius(etsX,MyX,MyX,DemiZone,[]),
+  ok.
+
+% when X > MyX + ?radius
+
+getRobins(Ets,MyX,MyX,DemiZone,List)  -> %first case just starting
+  NextX = ets:next(Ets,MyX),
+  PrevX = ets:prev(Ets,MyX),
+  getRobins(Ets,MyX,PrevX,DemiZone,List) ++ getRobins(Ets,MyX,NextX,DemiZone,List);
+
+getRobins(Ets,MyX,X,DemiZone,List) when X > MyX -> %case X > Myx
+  if X > MyX + ?radius -> List; %out of the rectangle
+    true-> NextX = ets:next(Ets,X),
+      [{_Key,Value}] = ets:lookup(Ets,X), % todo, add NODE to the PID
+    getRobins(Ets,MyX,NextX,DemiZone,Value ++ List)
+  end;
+
+getRobins(Ets,MyX,X,DemiZone,List) when X < MyX -> %case X < Myx
+  if X< MyX - ?radius -> List; %out of the rectangle
+    true ->PrevX = ets:prev(Ets,X),
+      [{_Key,Value}] = ets:lookup(Ets,X),
+    getRobins(Ets,MyX,PrevX,DemiZone,List ++ Value)
+  end.

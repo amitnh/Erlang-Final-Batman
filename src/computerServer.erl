@@ -19,7 +19,7 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 4). % number of processes in all the program "Robins"
+-define(N, 200). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
@@ -40,14 +40,10 @@ start_link([ComputerNodes,ComputersArea]) ->
     after 500-> ok
   end,
   spawn_link(fun()->updateMainServerEts() end).
-%%  castPlease(computerServerOnline). %%todo debug only
 
 updateMainServerEts()-> receive
                           after 1000 div ?updateMainEts -> gen_server:cast({global, tal@ubuntu},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})
                         end, updateMainServerEts().
-
-
-%%  {global, tal@ubuntu} ! banana3210. %" + node() + " im a computerServer with record: /n" + #computerStateM_state.
 
 
 %%%===================================================================
@@ -74,8 +70,8 @@ getArea([_|T1],[_|T2],MyNode) -> getArea(T1,T2,MyNode).
 
 initRobins(MyArea) -> %spawn N/4 Robins
   Loop = lists:seq(1,?N div 4),
-%% [erlang:monitor(process,spawn(moveSimulator,start_link,[[MyArea]]))|| _<- Loop]. %spawn a Robin and monitor it
-  [spawn(moveSimulator,start_link,[[MyArea]])|| _<- Loop]. %spawn a Robin and monitor it
+  %spawn a Robin and monitor it, we add the DemilitarizedZone, so the moveSimulator will know it
+  [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone]])|| _<- Loop].
 
 
 
