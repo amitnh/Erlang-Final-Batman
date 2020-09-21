@@ -286,7 +286,7 @@ getPrev(_,MyX,PrevX,List) when MyX - PrevX > ?radius ->  List;  % case prevX not
 getPrev(Ets,MyX,PrevX,List)  -> % case prevX in range
   [{_Key,Pids}] = ets:lookup(Ets,PrevX), % Value contains the list of Pids
   NewList =  [{PrevX,{Pid,node()}}||Pid<-Pids] ++ List,
-  getPrev(Ets,MyX,ets:next(Ets,PrevX),NewList).
+  getPrev(Ets,MyX,ets:prev(Ets,PrevX),NewList).
 %%===========================================================
 
 

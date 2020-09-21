@@ -19,7 +19,7 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 4). % number of processes in all the program "Robins"
+-define(N, 40). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
@@ -88,6 +88,11 @@ initRobins(MyArea) -> %spawn N/4 Robins
   {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
 handle_call(sendLocations, _From, State = #computerStateM_state{}) ->
   {reply, {ets:tab2list(etsX),ets:tab2list(etsY)}, State};
+handle_call({getNeighborsX,MyX}, _From, State = #computerStateM_state{}) -> %todo todo only temp
+  {reply, [], State};
+handle_call({getNeighborsY,MyY}, _From, State = #computerStateM_state{}) ->% todo todo only temp
+  {reply, [], State};
+
 
 handle_call(_Request, _From, State = #computerStateM_state{}) ->
   {reply, ok, State}.
