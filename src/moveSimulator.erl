@@ -229,12 +229,38 @@ robinsInRadius(State) ->
   Ylist = getPrev(etsY,MyY,MyY,[]) ++ getNext(etsY,MyY,MyY,[]),
 
   % case im close to the border, i will send a request to computerServer to look for neighbors in other computers
-  if (MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone) or
-     (MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) ->
-     {ListX,ListY} = gen_server:call({global, tal@ubuntu},{getNeighbors,MyX,MyY,DemiZone})
+  if (MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone) ->
+    XlistRemoteCom = gen_server:call({global, tal@ubuntu},{getNeighborsX,MyX}) %todo: return a list of {Pid,node()}
     end,
-  ok.
+  if (MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) ->
+    YlistRemoteCom = gen_server:call({global, tal@ubuntu},{getNeighborsY,MyY}) %todo: return a list of {Pid,node()}
+    end,
+  getPidsInCircle(MyX,MyY,Xlist++XlistRemoteCom,Ylist++YlistRemoteCom).
+
+
+
+
 %%===========================================================
+%% getPidsInCircle -> gets 2 lists: Xlist = [{Xlocation,{Pid,node}},....] and Ylist and return only the pids that are in the radius
+%%===========================================================
+getPidsInCircle(X,Y,Xlist,Ylist)-> Square = getSquare(Xlist,Ylist),
+  getCircle(Square). % Square -> [{x,y,address},...]
+
+%%getSquare returns {x,y,address},...] withing a square of radiusXradius
+getSquare(Xlist,Ylist) -> getSquare(Xlist,Ylist,[]).
+getSquare([],_,List)-> lists:filter(fun(X) -> X /= {} end, List); %removes all empty tuples from the list
+%for each X we will lookup a similar Y withing the square
+getSquare([{XHead,XPidHead}|XTail],Ylist,List) ->getSquare(XTail,Ylist,[getY(XHead,XPidHead,Ylist)|List]).
+
+getY(_,_,[])-> {};
+getY(XHead,XPidHead,[{YHead,XPidHead}|_])->{XHead,YHead,XPidHead};  %found a member in Ylist with the same address as X address
+getY(XHead,XPidHead,[{_,_}|Ylist])->getY(XHead,XPidHead,Ylist).
+
+getCircle(Square) -> lists:filter(fun({X,Y,Address}) -> math:sqrt(X*X+Y*Y)< ?radius end, Square). % Square -> [{x,y,address},...]
+%%===========================================================
+
+
+
 
 
 %%===========================================================
@@ -245,14 +271,14 @@ robinsInRadius(State) ->
   getNext(_,MyX,NextX,List) when NextX - MyX > ?radius ->  List;  % case nextX not in range
   getNext(Ets,MyX,NextX,List)  -> % case nextX in range
     [{_Key,Pids}] = ets:lookup(Ets,NextX), % Value contains the list of Pids
-    NewList = List ++ [{NextX,Pid}||Pid<-Pids],
+    NewList = List ++ [{NextX,{Pid,node()}}||Pid<-Pids],
     getNext(Ets,MyX,ets:next(Ets,NextX),NewList).
 
 getPrev(_,_,'$end_of_table',List)-> List;
 getPrev(_,MyX,PrevX,List) when MyX - PrevX > ?radius ->  List;  % case prevX not in range
 getPrev(Ets,MyX,PrevX,List)  -> % case prevX in range
   [{_Key,Pids}] = ets:lookup(Ets,PrevX), % Value contains the list of Pids
-  NewList =  [{PrevX,Pid}||Pid<-Pids] ++ List,
+  NewList =  [{PrevX,{Pid,node()}}||Pid<-Pids] ++ List,
   getPrev(Ets,MyX,ets:next(Ets,PrevX),NewList).
 %%===========================================================
 
