@@ -256,7 +256,7 @@ getY(_,_,[])-> {};
 getY(XHead,XPidHead,[{YHead,XPidHead}|_])->{XHead,YHead,XPidHead};  %found a member in Ylist with the same address as X address
 getY(XHead,XPidHead,[{_,_}|Ylist])->getY(XHead,XPidHead,Ylist).
 
-getCircle(Square) -> lists:filter(fun({X,Y,Address}) -> math:sqrt(X*X+Y*Y)< ?radius end, Square). % Square -> [{x,y,address},...]
+getCircle(Square) -> lists:filter(fun({X,Y,_Address}) -> (X*X+Y*Y< ?radius*?radius) end, Square). % Square -> [{x,y,address},...]
 %%===========================================================
 
 
