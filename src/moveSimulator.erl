@@ -15,7 +15,7 @@
 -export([start_link/1]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,getPidsInCircle/4,
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
@@ -248,7 +248,7 @@ robinsInRadius(State) ->
 %% output: is 1 list with all the Addresses in my radius -> [{Pid1,Node1},{Pid2,Node1},{Pid3,Node2},...]
 %%===========================================================
 getPidsInCircle(X,Y,Xlist,Ylist)-> Square = getSquare(Xlist,Ylist),
-  Circle =getCircle(Square), % Square -> [{x,y,address},...]
+  Circle =getCircle(X,Y,Square), % Square -> [{x,y,address},...]
   [Address||{_X,_Y,Address}<-Circle]. % returns only the Addresses back
 
 %%getSquare returns {x,y,address},...] withing a square of radiusXradius
@@ -261,7 +261,9 @@ getY(_,_,[])-> {};
 getY(XHead,XPidHead,[{YHead,XPidHead}|_])->{XHead,YHead,XPidHead};  %found a member in Ylist with the same address as X address
 getY(XHead,XPidHead,[{_,_}|Ylist])->getY(XHead,XPidHead,Ylist).
 
-getCircle(Square) -> lists:filter(fun({X,Y,_Address}) -> (X*X+Y*Y< ?radius*?radius) end, Square). % Square -> [{x,y,address},...]
+getCircle(MyX,MyY,Square) -> R = ?radius,
+  [{X,Y,Add}||{X,Y,Add}<-Square, ((X-MyX)*(X-MyX) + (Y-MyY)*(Y-MyY)) < R*R].% Square -> [{x,y,address},...]
+%%  lists:filter(fun({X,Y,_Address}) -> (((X*X)+(Y*Y))< (?radius*?radius)) end, Square).
 %%===========================================================
 
 
