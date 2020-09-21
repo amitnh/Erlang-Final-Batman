@@ -19,7 +19,7 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 3000). % number of processes in all the program "Robins"
+-define(N, 4). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
@@ -35,7 +35,8 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([ComputerNodes,ComputersArea]) ->
-  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[]),% [{debug,[trace]}]),
+%%  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[]),% [{debug,[trace]}]),
+  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[{debug,[trace]}]),
   receive
     after 500-> ok
   end,

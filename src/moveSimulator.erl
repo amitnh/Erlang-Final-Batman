@@ -38,7 +38,7 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(List::term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area,DemiZone]) ->
-  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
+  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone], [{debug,[trace]}]), %TODO change the name ?MODULE, it wont work with more then 1 computer
 %%  castPlease(moveSimulatorOnline),
   spawn_link(fun()->etsTimer(Pid) end),
   spawn_link(fun()->vectorTimer(Pid) end).

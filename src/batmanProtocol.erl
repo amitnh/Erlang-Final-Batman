@@ -15,22 +15,25 @@
 -export([start_link/1]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,castPlease/1]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(SERVER, ?MODULE).
 
 %%%===================================================================
--record(batmanProtocol_state, {known,pid}).
+-record(batmanProtocol_state, {known,pid,seqNum}).
 %% pid - the pid of my moveSimulator for putting it inside OGM / MSG
 %% -------------------------------------------------------
 %% known is a map of known Robins in the system
 %% each Robin contains map of neighbors Pid that he received messages from:
-%% {key-> Pid@Node, Value -> {Last Aware Time, Current Seq Number, Best Link, list of neighbors}}
-%% list of neighbors -> {list of in window seq numbers, last TTL, last Valid Time}
+%% known ->                {key-> Pid@Node, Value -> {Current Seq Number, Best Link, Last Aware Time, list of neighbors}}
+%% list of neighbors ->    {sorted-list of in window seq numbers, last TTL, last Valid Time}
+%%%===================================================================
+%% OGM -> {Sequence number, TTL, Originator Address }
+%% Originator Address -> {self(),node()}
 %%%===================================================================
 -define(windowSize, 128). %% Define the size of the window. only sequence numbers in the window will be counted and saved
 -define(TTL, 40). %% Time To Live, travel distance of a message
-
+-define(ORIGINATOR_INTERVAL, 1000). %% every ORIGINATOR_INTERVAL the node sends an OGM msg
 %%test TODO delete
 castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 
@@ -42,13 +45,15 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(PidMoveSimulator:: term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(PidMoveSimulator) ->
-  gen_server:start_link(?MODULE, [PidMoveSimulator], []),
+  {ok,Pid} = gen_server:start_link(?MODULE, [PidMoveSimulator], [{debug,[trace]}]),
+  spawn_link(fun()->ogmLoop(Pid) end). %sends cast to OGM every ORIGINATOR_INTERVAL
+
+
+ogmLoop(Pid)-> % sends OGM cast to batmanProtocol to send OGM every ?ORIGINATOR_INTERVAL time
   receive
-  after 2000-> ok
-  end.
-%%  castPlease(batmanME).
-
-
+  after ?ORIGINATOR_INTERVAL -> gen_server:cast(Pid,{sendOGM})
+  end,
+  ogmLoop(Pid).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -59,11 +64,9 @@ start_link(PidMoveSimulator) ->
   {ok, State :: #batmanProtocol_state{}} | {ok, State :: #batmanProtocol_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([PidMoveSimulator]) ->
-  {ok, #batmanProtocol_state{known = maps:new(),pid = PidMoveSimulator}}. %return a new empty map of known Robins
+  {ok, #batmanProtocol_state{known = maps:new(),pid = PidMoveSimulator,seqNum=0}}. %return a new empty map of known Robins
 
-ogmLoop()-> receive
-              after 1000-> sendOGM %TODO sendOGM function -> call get negibors from moveSimulator and sends them the message
-            end.
+
 %% @private
 %% @doc Handling call messages
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
@@ -83,6 +86,13 @@ handle_call(_Request, _From, State = #batmanProtocol_state{}) ->
   {noreply, NewState :: #batmanProtocol_state{}} |
   {noreply, NewState :: #batmanProtocol_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #batmanProtocol_state{}}).
+
+handle_cast({sendOGM}, State = #batmanProtocol_state{}) ->
+  SeqNum = State#batmanProtocol_state.seqNum +1,
+  OGM = {SeqNum, ?TTL,{self(),node()}},
+  gen_server:cast(State#batmanProtocol_state.pid,{sendOGM,OGM}),
+  {noreply, State#batmanProtocol_state{seqNum = SeqNum}};
+
 handle_cast(_Request, State = #batmanProtocol_state{}) ->
   {noreply, State}.
 
