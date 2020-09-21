@@ -89,8 +89,8 @@ handle_call(_Request, _From, State = #batmanProtocol_state{}) ->
 
 handle_cast({sendOGM}, State = #batmanProtocol_state{}) ->
   SeqNum = State#batmanProtocol_state.seqNum +1,
-  OGM = {SeqNum, ?TTL,{self(),node()}},
-  gen_server:cast(State#batmanProtocol_state.pid,{sendOGM,OGM}),
+  OGM = {SeqNum, ?TTL,{State#batmanProtocol_state.pid,node()}},
+  gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM}),
   {noreply, State#batmanProtocol_state{seqNum = SeqNum}};
 
 handle_cast(_Request, State = #batmanProtocol_state{}) ->

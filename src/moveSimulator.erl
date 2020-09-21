@@ -170,12 +170,12 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   ets:insert(etsY,[{RoundedNewY,NewListY}]),
   {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}; % todo check if it works
 
-%%handle_cast({sendOGM,OGM}, State = #moveSimulator_state{}) ->
-%%  ListOfRobins = robinsInRadius(State),
-%%  {noreply, State};
-handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
+
+handle_cast({sendToNeighbors,Msg}, State = #moveSimulator_state{}) -> % Msg usually is OGM
+  ListOfRobins = robinsInRadius(State),
+  [gen_server:cast(RobinAdd,{ogm,Msg,{self(),node()}}) ||RobinAdd <- ListOfRobins], % sends the OGM and the sender address to all the neighbors
   {noreply, State};
-handle_cast({sendToBatman,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
+handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
   {noreply, State};
 handle_cast(_Request, State = #moveSimulator_state{}) ->
   {noreply, State}.
@@ -213,12 +213,54 @@ code_change(_OldVsn, State = #moveSimulator_state{}, _Extra) ->
 %%%===================================================================
 
 
+%%===========================================================
+%%robinsInRadius -> return all the {pid,node} of all the pids that in my radius
+%%===========================================================
 robinsInRadius(State) ->
   MyX = State#moveSimulator_state.myX,
   MyY = State#moveSimulator_state.myY,
+  EndX =  State#moveSimulator_state.endX,
+  EndY =  State#moveSimulator_state.endY,
+  StartX =  State#moveSimulator_state.startX,
+  StartY =  State#moveSimulator_state.startY,
   DemiZone = State#moveSimulator_state.demiZone,
-%%  getRobinsInradius(etsX,MyX,MyX,DemiZone,[]), todo: define it
+  %Xlist and Ylist are all the pids in square of radius x radius
+  Xlist = getPrev(etsX,MyX,MyX,[]) ++ getNext(etsX,MyX,MyX,[]),
+  Ylist = getPrev(etsY,MyY,MyY,[]) ++ getNext(etsY,MyY,MyY,[]),
+
+  % case im close to the border, i will send a request to computerServer to look for neighbors in other computers
+  if (MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone) or
+     (MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) ->
+     {ListX,ListY} = gen_server:call({global, tal@ubuntu},{getNeighbors,MyX,MyY,DemiZone})
+    end,
   ok.
+%%===========================================================
+
+
+%%===========================================================
+%%% getNext and getPrev works for etsX or etsY
+%% they return a list of Location and pids, in the same computerServer in the radius range
+%%===========================================================
+  getNext(_,_,'$end_of_table',List)-> List;
+  getNext(_,MyX,NextX,List) when NextX - MyX > ?radius ->  List;  % case nextX not in range
+  getNext(Ets,MyX,NextX,List)  -> % case nextX in range
+    [{_Key,Pids}] = ets:lookup(Ets,NextX), % Value contains the list of Pids
+    NewList = List ++ [{NextX,Pid}||Pid<-Pids],
+    getNext(Ets,MyX,ets:next(Ets,NextX),NewList).
+
+getPrev(_,_,'$end_of_table',List)-> List;
+getPrev(_,MyX,PrevX,List) when MyX - PrevX > ?radius ->  List;  % case prevX not in range
+getPrev(Ets,MyX,PrevX,List)  -> % case prevX in range
+  [{_Key,Pids}] = ets:lookup(Ets,PrevX), % Value contains the list of Pids
+  NewList =  [{PrevX,Pid}||Pid<-Pids] ++ List,
+  getPrev(Ets,MyX,ets:next(Ets,PrevX),NewList).
+%%===========================================================
+
+
+
+
+
+
 
 % when X > MyX + ?radius
 
