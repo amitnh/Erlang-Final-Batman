@@ -241,10 +241,15 @@ robinsInRadius(State) ->
 
 
 %%===========================================================
-%% getPidsInCircle -> gets 2 lists: Xlist = [{Xlocation,{Pid,node}},....] and Ylist and return only the pids that are in the radius
+%% getPidsInCircle ->
+%% input: my x,y location and 2 lists as follows:
+%% Xlist = [{Xlocation,{Pid,node}},....] and Ylist and return only the pids that are in the radius
+%%
+%% output: is 1 list with all the Addresses in my radius -> [{Pid1,Node1},{Pid2,Node1},{Pid3,Node2},...]
 %%===========================================================
 getPidsInCircle(X,Y,Xlist,Ylist)-> Square = getSquare(Xlist,Ylist),
-  getCircle(Square). % Square -> [{x,y,address},...]
+  Circle =getCircle(Square), % Square -> [{x,y,address},...]
+  [Address||{_X,_Y,Address}<-Circle]. % returns only the Addresses back
 
 %%getSquare returns {x,y,address},...] withing a square of radiusXradius
 getSquare(Xlist,Ylist) -> getSquare(Xlist,Ylist,[]).
