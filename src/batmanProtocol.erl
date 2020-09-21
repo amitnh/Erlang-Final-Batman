@@ -15,20 +15,20 @@
 -export([start_link/1]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-  code_change/3,castPlease/1]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,castPlease/1]).
 
 -define(SERVER, ?MODULE).
 
 %%%===================================================================
 -record(batmanProtocol_state, {known,pid}).
 %% pid - the pid of my moveSimulator for putting it inside OGM / MSG
-%% --
+%% -------------------------------------------------------
 %% known is a map of known Robins in the system
-%% each Robin contains map of neighbors Pid that he received messages from
-%% each neighbor contain a sorted list of Relevant (in-window) sequence numbers for the relevant Robin
+%% each Robin contains map of neighbors Pid that he received messages from:
+%% {key-> Pid@Node, Value -> {Last Aware Time, Current Seq Number, Best Link, list of neighbors}}
+%% list of neighbors -> {list of in window seq numbers, last TTL, last Valid Time}
 %%%===================================================================
--define(windowSize, 128). %% Define the size of the window. only sequance numbers in the window will be counted and saved
+-define(windowSize, 128). %% Define the size of the window. only sequence numbers in the window will be counted and saved
 -define(TTL, 40). %% Time To Live, travel distance of a message
 
 %%test TODO delete
@@ -39,7 +39,7 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
 
 %% @doc Spawns the server and registers the local name (unique)
--spec(start_link(PidMoveSimulator) ->
+-spec(start_link(PidMoveSimulator:: term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(PidMoveSimulator) ->
   gen_server:start_link(?MODULE, [PidMoveSimulator], []),
@@ -62,7 +62,7 @@ init([PidMoveSimulator]) ->
   {ok, #batmanProtocol_state{known = maps:new(),pid = PidMoveSimulator}}. %return a new empty map of known Robins
 
 ogmLoop()-> receive
-              after 1000-> sendOGM %TODO sendOGM function -> call get negibors from moveSimulator and sends tem the message
+              after 1000-> sendOGM %TODO sendOGM function -> call get negibors from moveSimulator and sends them the message
             end.
 %% @private
 %% @doc Handling call messages
@@ -105,13 +105,6 @@ handle_info(_Info, State = #batmanProtocol_state{}) ->
 terminate(_Reason, _State = #batmanProtocol_state{}) ->
   ok.
 
-%% @private
-%% @doc Convert process state when code is changed
--spec(code_change(OldVsn :: term() | {down, term()}, State :: #batmanProtocol_state{},
-    Extra :: term()) ->
-  {ok, NewState :: #batmanProtocol_state{}} | {error, Reason :: term()}).
-code_change(_OldVsn, State = #batmanProtocol_state{}, _Extra) ->
-  {ok, State}.
 
 %%%===================================================================
 %%% Internal functions

@@ -35,7 +35,7 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
 
 %% @doc Spawns the server and registers the local name (unique)
--spec(start_link(Area::term(),DemiZone::term()) ->
+-spec(start_link(List::term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area,DemiZone]) ->
   {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
@@ -170,13 +170,13 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   ets:insert(etsY,[{RoundedNewY,NewListY}]),
   {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}; % todo check if it works
 
-handle_cast({sendOGM,OGM}, State = #moveSimulator_state{}) ->
-  ListOfRobins = robinsInRadius(State).
-  {noreply, State};
+%%handle_cast({sendOGM,OGM}, State = #moveSimulator_state{}) ->
+%%  ListOfRobins = robinsInRadius(State),
+%%  {noreply, State};
 handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
   {noreply, State};
 handle_cast({sendToBatman,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
-{noreply, State};
+  {noreply, State};
 handle_cast(_Request, State = #moveSimulator_state{}) ->
   {noreply, State}.
 
@@ -217,7 +217,7 @@ robinsInRadius(State) ->
   MyX = State#moveSimulator_state.myX,
   MyY = State#moveSimulator_state.myY,
   DemiZone = State#moveSimulator_state.demiZone,
-  getRobinsInradius(etsX,MyX,MyX,DemiZone,[]),
+%%  getRobinsInradius(etsX,MyX,MyX,DemiZone,[]), todo: define it
   ok.
 
 % when X > MyX + ?radius

@@ -51,7 +51,7 @@ start_link(ComputerNodes,ComputersArea) ->
   {stop, Reason :: term()} | ignore).
 
 init([{ComputerNodes,ComputersArea}]) ->
-  % {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
+  % etsRobins: {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
   ets:new(etsRobins,[set,public,named_table]),
 %%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers todo
 %%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area todo
