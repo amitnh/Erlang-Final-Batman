@@ -171,9 +171,9 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}; % todo check if it works
 
 
-handle_cast({sendToNeighbors,Msg}, State = #moveSimulator_state{}) -> % Msg usually is OGM
-  ListOfRobins = robinsInRadius(State),
-  castPlease({ListOfRobins,{ogm,Msg,{self(),node()}}}),
+handle_cast({sendToNeighbors,OGM}, State = #moveSimulator_state{}) -> % Msg usually is OGM
+  ListOfRobins = robinsInRadius(State,OGM),
+  castPlease({ListOfRobins,{ogm,OGM,{self(),node()}}}),
   [gen_server:cast(Pid,{ogm,Msg,{self(),node()}}) ||{Pid,_Node} <- ListOfRobins], % sends the OGM and the sender address to all the neighbors
   {noreply, State};
 handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
@@ -217,7 +217,7 @@ code_change(_OldVsn, State = #moveSimulator_state{}, _Extra) ->
 %%====================================================================
 %%robinsInRadius -> return all the {pid,node} of all the pids that in my radius
 %%====================================================================
-robinsInRadius(State) ->
+robinsInRadius(State,OGM) ->
   MyX = round(State#moveSimulator_state.myX),
   MyY = round(State#moveSimulator_state.myY),
   EndX =  State#moveSimulator_state.endX,
@@ -230,15 +230,15 @@ robinsInRadius(State) ->
   Ylist = getPrev(etsY,MyY,MyY,[]) ++ getNext(etsY,MyY,MyY,[]),
 
   % case im close to the border, i will send a request to computerServer to look for neighbors in other computers
-%%  if (MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone) ->
-%%    XlistRemoteCom = gen_server:call({global, tal@ubuntu},{getNeighborsX,MyX}) %todo: return a list of {Pid,node()}
-%%    end,
-%%  if (MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) ->
-%%    YlistRemoteCom = gen_server:call({global, tal@ubuntu},{getNeighborsY,MyY}) %todo: return a list of {Pid,node()}
-%%    end,
-   [Add||Add<-getPidsInCircle(MyX,MyY,Xlist,Ylist),Add /= {self(),node()}]. % deletes myself from neighbors
+  if (MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone) ->
+    gen_server:cast({global, tal@ubuntu},{sendOGMtoNeighborsX,MyX,MyY,OGM,{self(),node()}}) % tell the computer to send OGM to the nodes in other computer
+    end,
+  if (MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) ->
+    gen_server:cast({global, tal@ubuntu},{sendOGMtoNeighborsY,MyX,MyY,OGM,{self(),node()}}) %
+    end,
 
-%% getPidsInCircle(MyX,MyY,Xlist++XlistRemoteCom,Ylist++YlistRemoteCom).todo: replace back
+   [Add||Add<-getPidsInCircle(MyX,MyY,Xlist,Ylist),Add /= {self(),node()}]. % deletes myself from neighbors and return the list of pids in my radius
+
 
 
 

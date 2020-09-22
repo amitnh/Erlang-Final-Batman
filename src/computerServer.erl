@@ -88,9 +88,8 @@ initRobins(MyArea) -> %spawn N/4 Robins
   {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
 handle_call(sendLocations, _From, State = #computerStateM_state{}) ->
   {reply, {ets:tab2list(etsX),ets:tab2list(etsY)}, State};
-handle_call({getNeighborsX,MyX}, _From, State = #computerStateM_state{}) -> %todo todo only temp
-  {reply, [], State};
-handle_call({getNeighborsY,MyY}, _From, State = #computerStateM_state{}) ->% todo todo only temp
+
+handle_call({sendOGMtoNeighborsY,MyX,MyY,OGM,{Pid,Node}}, _From, State = #computerStateM_state{}) ->% todo todo only temp
   {reply, [], State};
 
 
@@ -103,6 +102,40 @@ handle_call(_Request, _From, State = #computerStateM_state{}) ->
   {noreply, NewState :: #computerStateM_state{}} |
   {noreply, NewState :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
+handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{Pid,Node}}, State = #computerStateM_state{}) -> %todo todo only temp
+  {StartX,EndX,_,_}= State#computerStateM_state.myArea,
+  DisToLeft = MyX - StartX,
+  DisToRight = EndX - MyY,
+  if DisToRight < DisToLeft ->% im close to the right border
+    if EndX < 2000 -> % there is a computer to te right
+      [Node] = neighbor(right),
+      gen_server:cast(Node,{ogmFromNeighbor,OGM,{Pid,Node}})
+    end;
+  true -> % else DisToRight >= DisToLeft
+    if StartX > 0 -> % there is a computer to the left
+      [Node] = neighbor(left),
+      gen_server:cast(Node,{ogmFromNeighbor,OGM,{Pid,Node}})
+    end
+  end,
+  {noreply, State};
+handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{Pid,Node}}, State = #computerStateM_state{}) -> %todo todo only temp
+  {_,_,StartY,EndY}= State#computerStateM_state.myArea,
+  DisToUp = MyY - StartY,
+  DisToDown = EndY - MyY,
+  if DisToDown < DisToUp ->% im close to the right border
+    if EndY < 2000 -> % there is a computer to te right
+      [Node] = neighbor(down),
+      gen_server:cast(Node,{ogmFromNeighbor,OGM,{Pid,Node}})
+    end;
+    true -> % else DisToRight >= DisToLeft
+      if StartY > 0 -> % there is a computer to the left
+        [Node] = neighbor(up),
+        gen_server:cast(Node,{ogmFromNeighbor,OGM,{Pid,Node}})
+      end
+  end,
+  {noreply, State};
+handle_cast({Node,{ogmFromNeighbor,OGM,{Pid,Node}}, State = #computerStateM_state{}) ->
+  {noreply, State};
 handle_cast(_Request, State = #computerStateM_state{}) ->
   {noreply, State}.
 
@@ -136,3 +169,12 @@ code_change(_OldVsn, State = #computerStateM_state{}, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+%%Neighbor -> returns the node of the computer to my Direction
+neighbor(State,Dir) ->
+  ZipLists = lists:zip(State#computerStateM_state.computerNodes,State#computerStateM_state.computersArea),
+  case Dir of
+    right -> [Node ||{Node,{_Sx,Ex,_Sy,_Ey}}<- ZipLists, Ex = 2000];
+    left -> [Node ||{Node,{Sx,_Ex,_Sy,_Ey}}<- ZipLists, Sx = 0];
+    up -> [Node ||{Node,{_Sx,_Ex,_Sy,Ey}}<- ZipLists, Ey = 2000];
+    true -> [Node ||{Node,{_Sx,_Ex,Sy,_Ey}}<- ZipLists, Sy = 0] % case down
+  end.
