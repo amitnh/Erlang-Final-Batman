@@ -110,12 +110,12 @@ handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{Pid,Node}}, State = #computerState
   DisToRight = EndX - MyY,
   if DisToRight < DisToLeft ->% im close to the right border
     if EndX < 2000 -> % there is a computer to te right
-      [Node] = neighbor(right),
+      [Node] = neighbor(State,right),
       gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
     end;
   true -> % else DisToRight >= DisToLeft
     if StartX > 0 -> % there is a computer to the left
-      [Node] = neighbor(left),
+      [Node] = neighbor(State,left),
       gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
     end
   end,
@@ -126,12 +126,12 @@ handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{Pid,Node}}, State = #computerState
   DisToDown = EndY - MyY,
   if DisToDown < DisToUp ->% im close to the right border
     if EndY < 2000 -> % there is a computer to te right
-      [Node] = neighbor(down),
+      [Node] = neighbor(State,down),
       gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
     end;
     true -> % else DisToRight >= DisToLeft
       if StartY > 0 -> % there is a computer to the left
-        [Node] = neighbor(up),
+        [Node] = neighbor(State,up),
         gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
       end
   end,

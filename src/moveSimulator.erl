@@ -24,7 +24,7 @@
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 -define(radius ,100).
 
--record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction}).
+-record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction,myBatman}).
 
 
 %%test TODO delete
@@ -73,9 +73,9 @@ vectorTimer(Pid)->
   {ok, State :: #moveSimulator_state{}} | {ok, State :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([{StartX,EndX,StartY,EndY},DemiZone]) ->
-  batmanProtocol:start_link(self()), %creates batmanProtocol and link it to this process
+  {ok, MyBatman} = batmanProtocol:start_link(self()), %creates batmanProtocol and link it to this process
   {X,Y} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
-  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0}};
+  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman}};
 init(_)-> castPlease(errorInArea).
 
 %%---------------------------------------------------------------------------------------------------
@@ -170,7 +170,8 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   ets:insert(etsY,[{RoundedNewY,NewListY}]),
   {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}; % todo check if it works
 
-
+%%============sendToNeighbors=============================
+%% sends OGM to radius pids
 handle_cast({sendToNeighbors,OGM}, State = #moveSimulator_state{}) -> % Msg usually is OGM
   ListOfRobins = robinsInRadius(State,OGM),
   castPlease({ListOfRobins,{ogm,OGM,{self(),node()}}}),
@@ -178,6 +179,15 @@ handle_cast({sendToNeighbors,OGM}, State = #moveSimulator_state{}) -> % Msg usua
   {noreply, State};
 handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
   {noreply, State};
+
+%%===============OGM recieved=================================
+%%send it to the Batman
+handle_cast({ogm,OGM,{Pid,Node}}, State = #moveSimulator_state{}) ->
+  Batman =State#moveSimulator_state.myBatman,
+  gen_server:cast(Batman,{ogm,OGM,{Pid,Node}}),
+{noreply, State};
+
+
 handle_cast(_Request, State = #moveSimulator_state{}) ->
   {noreply, State}.
 

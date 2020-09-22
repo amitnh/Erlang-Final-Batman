@@ -26,7 +26,7 @@
 %% known is a map of known Robins in the system
 %% each Robin contains map of neighbors Pid that he received messages from:
 %% known ->                {key-> Pid@Node, Value -> {Current Seq Number, Best Link, Last Aware Time, list of neighbors}}
-%% list of neighbors ->    {sorted-list of in window seq numbers, last TTL, last Valid Time}
+%% list of neighbors ->    {Pid@Node,sorted-list of in window seq numbers, last TTL, last Valid Time}
 %%%===================================================================
 %% OGM -> {Sequence number, TTL, Originator Address }
 %% Originator Address -> {self(),node()}
@@ -93,6 +93,46 @@ handle_cast({sendOGM}, State = #batmanProtocol_state{}) ->
   gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM}),
   {noreply, State#batmanProtocol_state{seqNum = SeqNum}};
 
+
+
+
+
+%%===============OGM recieved from direct neighbor=================================
+handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},OriginatorAddress}, State = #batmanProtocol_state{}) ->
+  %----------------------
+  % process ogm:
+  NewState = processOgm(State,{SeqNum, TTL,OriginatorAddress},OriginatorAddress),
+  %----------------------
+  % rebroadcast ogm:
+  if (OriginatorAddress /= {State#batmanProtocol_state.pid,node()}) and (TTL-1 > 0) -> %% check if im not the Originator. and if TTL>0
+    OGM = {SeqNum, TTL-1 ,OriginatorAddress}, % Time to live -1
+    gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM})
+    end,
+
+  {noreply, NewState};
+%%===============OGM recieved not from direct neighbor=================================
+handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},FromAddress}, State = #batmanProtocol_state{}) ->
+  %----------------------
+  % process ogm:
+  {NewState,IsNewSeq,IsSameTTL} = processOgm(State,{SeqNum, TTL,OriginatorAddress},FromAddress),
+  %----------------------
+  % rebroadcast ogm:
+  if (OriginatorAddress /= {State#batmanProtocol_state.pid,node()}) and (TTL-1 > 0) -> %% check if im not the Originator. and if TTL>0
+    {CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors} = maps:get(OriginatorAddress,NewState#batmanProtocol_state.known),
+      if BestLink == FromAddress -> % i rebroadcast only if i received the msg from Best link
+              if IsNewSeq or IsSameTTL ->
+                        OGM = {SeqNum, TTL-1 ,OriginatorAddress}, % Time to live -1
+                        gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM})
+              end
+      end
+  end,
+  {noreply, NewState};
+
+%%============================================================================================
+
+
+
+
 handle_cast(_Request, State = #batmanProtocol_state{}) ->
   {noreply, State}.
 
@@ -119,3 +159,22 @@ terminate(_Reason, _State = #batmanProtocol_state{}) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%  processOgm -> receive the OGM and updates the know map accordingly
+%%  returns -> {NewState,IsNewSeq,IsSameTTL}
+processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
+  %first thing to check if the SeqNum is new, if not return State
+  Known = State#batmanProtocol_state.known,
+  IsKey= maps:is_key(OriginatorAddress,Known),
+
+ if IsKey->
+   %=====================in the map, update it=================
+  {CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors} = maps:get(OriginatorAddress,Known);
+
+  %=====================not in the map, generate it=================
+  true ->
+    NewKnown = maps:put(OriginatorAddress,{SeqNum,FromAddress,erlang:system_time(millisecond),[{FromAddress,[SeqNum],TTL,erlang:system_time(millisecond) }]},Known),
+    IsNewSeq = true,
+    IsSameTTL = false,
+    {State#batmanProtocol_state{known = NewKnown},IsNewSeq,IsSameTTL}
+  end.
