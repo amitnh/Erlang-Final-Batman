@@ -173,7 +173,8 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
 
 handle_cast({sendToNeighbors,Msg}, State = #moveSimulator_state{}) -> % Msg usually is OGM
   ListOfRobins = robinsInRadius(State),
-  [gen_server:cast(RobinAdd,{ogm,Msg,{self(),node()}}) ||RobinAdd <- ListOfRobins], % sends the OGM and the sender address to all the neighbors
+  castPlease({ListOfRobins,{ogm,Msg,{self(),node()}}}),
+  [gen_server:cast(Pid,{ogm,Msg,{self(),node()}}) ||{Pid,_Node} <- ListOfRobins], % sends the OGM and the sender address to all the neighbors
   {noreply, State};
 handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
   {noreply, State};
@@ -213,12 +214,12 @@ code_change(_OldVsn, State = #moveSimulator_state{}, _Extra) ->
 %%%===================================================================
 
 
-%%===========================================================
+%%====================================================================
 %%robinsInRadius -> return all the {pid,node} of all the pids that in my radius
-%%===========================================================
+%%====================================================================
 robinsInRadius(State) ->
-  MyX = State#moveSimulator_state.myX,
-  MyY = State#moveSimulator_state.myY,
+  MyX = round(State#moveSimulator_state.myX),
+  MyY = round(State#moveSimulator_state.myY),
   EndX =  State#moveSimulator_state.endX,
   EndY =  State#moveSimulator_state.endY,
   StartX =  State#moveSimulator_state.startX,
@@ -229,14 +230,15 @@ robinsInRadius(State) ->
   Ylist = getPrev(etsY,MyY,MyY,[]) ++ getNext(etsY,MyY,MyY,[]),
 
   % case im close to the border, i will send a request to computerServer to look for neighbors in other computers
-  if (MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone) ->
-    XlistRemoteCom = gen_server:call({global, tal@ubuntu},{getNeighborsX,MyX}) %todo: return a list of {Pid,node()}
-    end,
-  if (MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) ->
-    YlistRemoteCom = gen_server:call({global, tal@ubuntu},{getNeighborsY,MyY}) %todo: return a list of {Pid,node()}
-    end,
-  getPidsInCircle(MyX,MyY,Xlist++XlistRemoteCom,Ylist++YlistRemoteCom).
+%%  if (MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone) ->
+%%    XlistRemoteCom = gen_server:call({global, tal@ubuntu},{getNeighborsX,MyX}) %todo: return a list of {Pid,node()}
+%%    end,
+%%  if (MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) ->
+%%    YlistRemoteCom = gen_server:call({global, tal@ubuntu},{getNeighborsY,MyY}) %todo: return a list of {Pid,node()}
+%%    end,
+   [Add||Add<-getPidsInCircle(MyX,MyY,Xlist,Ylist),Add /= {self(),node()}]. % deletes myself from neighbors
 
+%% getPidsInCircle(MyX,MyY,Xlist++XlistRemoteCom,Ylist++YlistRemoteCom).todo: replace back
 
 
 
@@ -247,7 +249,9 @@ robinsInRadius(State) ->
 %%
 %% output: is 1 list with all the Addresses in my radius -> [{Pid1,Node1},{Pid2,Node1},{Pid3,Node2},...]
 %%===========================================================
-getPidsInCircle(X,Y,Xlist,Ylist)-> Square = getSquare(Xlist,Ylist),
+getPidsInCircle(X,Y,Xlist,Ylist)->
+
+  Square = getSquare(Xlist,Ylist),
   Circle =getCircle(X,Y,Square), % Square -> [{x,y,address},...]
   [Address||{_X,_Y,Address}<-Circle]. % returns only the Addresses back
 
@@ -255,11 +259,12 @@ getPidsInCircle(X,Y,Xlist,Ylist)-> Square = getSquare(Xlist,Ylist),
 getSquare(Xlist,Ylist) -> getSquare(Xlist,Ylist,[]).
 getSquare([],_,List)-> lists:filter(fun(X) -> X /= {} end, List); %removes all empty tuples from the list
 %for each X we will lookup a similar Y withing the square
-getSquare([{XHead,XPidHead}|XTail],Ylist,List) ->getSquare(XTail,Ylist,[getY(XHead,XPidHead,Ylist)|List]).
+getSquare([{X,Xaddr}|T],Ylist,List) -> getSquare(T,Ylist,[getY(X,Xaddr,Ylist)] ++ List).
 
 getY(_,_,[])-> {};
-getY(XHead,XPidHead,[{YHead,XPidHead}|_])->{XHead,YHead,XPidHead};  %found a member in Ylist with the same address as X address
-getY(XHead,XPidHead,[{_,_}|Ylist])->getY(XHead,XPidHead,Ylist).
+getY(X,Xaddr,[{Y,Xaddr}|_])->{X,Y,Xaddr};  %found a member in Ylist with the same address as X address
+getY(X,Xaddr,[_H|T])->getY(X,Xaddr,T);
+getY(_,_,_)-> {}.
 
 getCircle(MyX,MyY,Square) -> R = ?radius,
   [{X,Y,Add}||{X,Y,Add}<-Square, ((X-MyX)*(X-MyX) + (Y-MyY)*(Y-MyY)) < R*R].% Square -> [{x,y,address},...]
@@ -267,51 +272,21 @@ getCircle(MyX,MyY,Square) -> R = ?radius,
 %%===========================================================
 
 
-
-
-
 %%===========================================================
-%%% getNext and getPrev works for etsX or etsY
+%%% getNext and getPrev works on etsX or etsY
 %% they return a list of Location and pids, in the same computerServer in the radius range
 %%===========================================================
-  getNext(_,_,'$end_of_table',List)-> List;
-  getNext(_,MyX,NextX,List) when NextX - MyX > ?radius ->  List;  % case nextX not in range
-  getNext(Ets,MyX,NextX,List)  -> % case nextX in range
-    [{_Key,Pids}] = ets:lookup(Ets,NextX), % Value contains the list of Pids
+getNext(_,_,'$end_of_table',List)-> List;
+getNext(_,MyX,NextX,List) when NextX - MyX > ?radius ->  List;  % case nextX not in range
+getNext(Ets,MyX,NextX,List)  -> % case nextX in range
+  [{_Key,Pids}]= ets:lookup(Ets,NextX), % Value contains the list of Pids
     NewList = List ++ [{NextX,{Pid,node()}}||Pid<-Pids],
     getNext(Ets,MyX,ets:next(Ets,NextX),NewList).
 
 getPrev(_,_,'$end_of_table',List)-> List;
 getPrev(_,MyX,PrevX,List) when MyX - PrevX > ?radius ->  List;  % case prevX not in range
 getPrev(Ets,MyX,PrevX,List)  -> % case prevX in range
-  [{_Key,Pids}] = ets:lookup(Ets,PrevX), % Value contains the list of Pids
+  [{_Key,Pids}]= ets:lookup(Ets,PrevX), % Value contains the list of Pids
   NewList =  [{PrevX,{Pid,node()}}||Pid<-Pids] ++ List,
   getPrev(Ets,MyX,ets:prev(Ets,PrevX),NewList).
 %%===========================================================
-
-
-
-
-
-
-
-% when X > MyX + ?radius
-
-getRobins(Ets,MyX,MyX,DemiZone,List)  -> %first case just starting
-  NextX = ets:next(Ets,MyX),
-  PrevX = ets:prev(Ets,MyX),
-  getRobins(Ets,MyX,PrevX,DemiZone,List) ++ getRobins(Ets,MyX,NextX,DemiZone,List);
-
-getRobins(Ets,MyX,X,DemiZone,List) when X > MyX -> %case X > Myx
-  if X > MyX + ?radius -> List; %out of the rectangle
-    true-> NextX = ets:next(Ets,X),
-      [{_Key,Value}] = ets:lookup(Ets,X), % todo, add NODE to the PID
-    getRobins(Ets,MyX,NextX,DemiZone,Value ++ List)
-  end;
-
-getRobins(Ets,MyX,X,DemiZone,List) when X < MyX -> %case X < Myx
-  if X< MyX - ?radius -> List; %out of the rectangle
-    true ->PrevX = ets:prev(Ets,X),
-      [{_Key,Value}] = ets:lookup(Ets,X),
-    getRobins(Ets,MyX,PrevX,DemiZone,List ++ Value)
-  end.
