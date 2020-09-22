@@ -134,7 +134,7 @@ handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{Pid,Node}}, State = #computerState
       end
   end,
   {noreply, State};
-handle_cast({Node,{ogmFromNeighbor,OGM,{Pid,Node}}, State = #computerStateM_state{}) ->
+handle_cast({Node,{ogmFromNeighbor,OGM,{Pid,Node}}}, State = #computerStateM_state{}) ->
   {noreply, State};
 handle_cast(_Request, State = #computerStateM_state{}) ->
   {noreply, State}.
