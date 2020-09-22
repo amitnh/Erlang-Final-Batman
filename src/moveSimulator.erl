@@ -15,8 +15,8 @@
 -export([start_link/1]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,getPidsInCircle/4,
-  code_change/3,castPlease/1]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, getPidsInCircle/4,
+  code_change/3, castPlease/1, robinsInRadiusForRemote/2]).
 
 -define(SERVER, ?MODULE).
 -define(updateEts ,20). %how many time per second to update the ETS's
@@ -174,7 +174,7 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
 handle_cast({sendToNeighbors,OGM}, State = #moveSimulator_state{}) -> % Msg usually is OGM
   ListOfRobins = robinsInRadius(State,OGM),
   castPlease({ListOfRobins,{ogm,OGM,{self(),node()}}}),
-  [gen_server:cast(Pid,{ogm,Msg,{self(),node()}}) ||{Pid,_Node} <- ListOfRobins], % sends the OGM and the sender address to all the neighbors
+  [gen_server:cast(Pid,{ogm,OGM,{self(),node()}}) ||{Pid,_Node} <- ListOfRobins], % sends the OGM and the sender address to all the neighbors
   {noreply, State};
 handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
   {noreply, State};
@@ -238,11 +238,20 @@ robinsInRadius(State,OGM) ->
     end,
 
    [Add||Add<-getPidsInCircle(MyX,MyY,Xlist,Ylist),Add /= {self(),node()}]. % deletes myself from neighbors and return the list of pids in my radius
-
-
-
-
 %%===========================================================
+%%===========================================================
+%%help other computer just find the pids in the radius
+robinsInRadiusForRemote(X,Y) ->
+
+  %Xlist and Ylist are all the pids in square of (radius x radius)
+  Xlist = getPrev(etsX,X,X,[]) ++ getNext(etsX,X,X,[]),
+  Ylist = getPrev(etsY,Y,Y,[]) ++ getNext(etsY,Y,Y,[]),
+  getPidsInCircle(Y,Y,Xlist,Ylist).
+%%===========================================================
+
+
+
+
 %% getPidsInCircle ->
 %% input: my x,y location and 2 lists as follows:
 %% Xlist = [{Xlocation,{Pid,node}},....] and Ylist and return only the pids that are in the radius

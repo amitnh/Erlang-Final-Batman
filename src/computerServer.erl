@@ -102,6 +102,8 @@ handle_call(_Request, _From, State = #computerStateM_state{}) ->
   {noreply, NewState :: #computerStateM_state{}} |
   {noreply, NewState :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
+
+%%===================================================================================
 handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{Pid,Node}}, State = #computerStateM_state{}) -> %todo todo only temp
   {StartX,EndX,_,_}= State#computerStateM_state.myArea,
   DisToLeft = MyX - StartX,
@@ -109,12 +111,12 @@ handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{Pid,Node}}, State = #computerState
   if DisToRight < DisToLeft ->% im close to the right border
     if EndX < 2000 -> % there is a computer to te right
       [Node] = neighbor(right),
-      gen_server:cast(Node,{ogmFromNeighbor,OGM,{Pid,Node}})
+      gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
     end;
   true -> % else DisToRight >= DisToLeft
     if StartX > 0 -> % there is a computer to the left
       [Node] = neighbor(left),
-      gen_server:cast(Node,{ogmFromNeighbor,OGM,{Pid,Node}})
+      gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
     end
   end,
   {noreply, State};
@@ -125,20 +127,26 @@ handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{Pid,Node}}, State = #computerState
   if DisToDown < DisToUp ->% im close to the right border
     if EndY < 2000 -> % there is a computer to te right
       [Node] = neighbor(down),
-      gen_server:cast(Node,{ogmFromNeighbor,OGM,{Pid,Node}})
+      gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
     end;
     true -> % else DisToRight >= DisToLeft
       if StartY > 0 -> % there is a computer to the left
         [Node] = neighbor(up),
-        gen_server:cast(Node,{ogmFromNeighbor,OGM,{Pid,Node}})
+        gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
       end
   end,
   {noreply, State};
-handle_cast({Node,{ogmFromNeighbor,OGM,{Pid,Node}}}, State = #computerStateM_state{}) ->
+%%===================================================================================
+
+%%===================================================================================
+handle_cast({Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}}}, State = #computerStateM_state{}) ->
+%%  send the OGM to all the Robins in the radius in my computer
+  ListOfRobins = moveSimulator:robinsInRadiusForRemote(MyX,MyY),
+  [gen_server:cast(Pid,{ogm,OGM,{Pid,Node}}) ||{Pid,_Node} <- ListOfRobins],
   {noreply, State};
 handle_cast(_Request, State = #computerStateM_state{}) ->
   {noreply, State}.
-
+%%===================================================================================
 %% @private
 %% @doc Handling all non call/cast messages
 -spec(handle_info(Info :: timeout() | term(), State :: #computerStateM_state{}) ->
