@@ -19,8 +19,8 @@
   code_change/3, castPlease/1, robinsInRadiusForRemote/2]).
 
 -define(SERVER, ?MODULE).
--define(updateEts ,20). %how many time per second to update the ETS's
--define(velMax , 100). %range of the random velocity of the node in meter/milisec
+-define(updateEts ,5). %how many time per second to update the ETS's
+-define(velMax , 5). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 -define(radius ,100).
 
@@ -174,7 +174,7 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
 %% sends OGM to radius pids
 handle_cast({sendToNeighbors,OGM}, State = #moveSimulator_state{}) -> % Msg usually is OGM
   ListOfRobins = robinsInRadius(State,OGM),
-  castPlease({ListOfRobins,{ogm,OGM,{self(),node()}}}),
+%%  castPlease({ListOfRobins,{ogm,OGM,{self(),node()}}}),
   [gen_server:cast(Pid,{ogm,OGM,{self(),node()}}) ||{Pid,_Node} <- ListOfRobins], % sends the OGM and the sender address to all the neighbors
   {noreply, State};
 handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
@@ -241,10 +241,12 @@ robinsInRadius(State,OGM) ->
 
   % case im close to the border, i will send a request to computerServer to look for neighbors in other computers
   if (MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone) ->
-    gen_server:cast({global, tal@ubuntu},{sendOGMtoNeighborsX,MyX,MyY,OGM,{self(),node()}}) % tell the computer to send OGM to the nodes in other computer
+    gen_server:cast({global, tal@ubuntu},{sendOGMtoNeighborsX,MyX,MyY,OGM,{self(),node()}}); % tell the computer to send OGM to the nodes in other computer
+  true->ok
     end,
   if (MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) ->
-    gen_server:cast({global, tal@ubuntu},{sendOGMtoNeighborsY,MyX,MyY,OGM,{self(),node()}}) %
+    gen_server:cast({global, tal@ubuntu},{sendOGMtoNeighborsY,MyX,MyY,OGM,{self(),node()}}); %
+  true->ok
     end,
 
    [Add||Add<-getPidsInCircle(MyX,MyY,Xlist,Ylist),Add /= {self(),node()}]. % deletes myself from neighbors and return the list of pids in my radius

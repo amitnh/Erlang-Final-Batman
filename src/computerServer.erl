@@ -21,7 +21,7 @@
 -define(SERVER, ?MODULE).
 -define(N, 12). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
--define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
+-define(updateMainEts, 5). % refresh rate to mainServer EtsRobins
 
 
 -record(computerStateM_state, {computerNodes,computersArea, myArea}).

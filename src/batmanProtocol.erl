@@ -46,7 +46,8 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(PidMoveSimulator) ->
   {ok,Pid} = gen_server:start_link(?MODULE, [PidMoveSimulator], [{debug,[trace]}]),
-  spawn_link(fun()->ogmLoop(Pid) end). %sends cast to OGM every ORIGINATOR_INTERVAL
+  spawn_link(fun()->ogmLoop(Pid) end),
+  {ok,Pid}. %sends cast to OGM every ORIGINATOR_INTERVAL
 
 
 ogmLoop(Pid)-> % sends OGM cast to batmanProtocol to send OGM every ?ORIGINATOR_INTERVAL time
@@ -101,10 +102,11 @@ handle_cast({sendOGM}, State = #batmanProtocol_state{}) ->
 handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},OriginatorAddress}, State = #batmanProtocol_state{}) ->
   %----------------------
   % process ogm:
-  NewState = processOgm(State,{SeqNum, TTL,OriginatorAddress},OriginatorAddress),
+  {NewState,_IsNewSeq,_IsSameTTL} = processOgm(State,{SeqNum, TTL,OriginatorAddress},OriginatorAddress),
   %----------------------
   % rebroadcast ogm:
-  if (OriginatorAddress /= {State#batmanProtocol_state.pid,node()}) and (TTL-1 > 0) -> %% check if im not the Originator. and if TTL>0
+  Pid=State#batmanProtocol_state.pid,
+  if ((OriginatorAddress =/= {Pid,node()}) and (TTL-1 > 0)) -> %% check if im not the Originator. and if TTL>0
     OGM = {SeqNum, TTL-1 ,OriginatorAddress}, % Time to live -1
     gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM})
     end,
@@ -117,14 +119,20 @@ handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},FromAddress}, State = #batmanPr
   {NewState,IsNewSeq,IsSameTTL} = processOgm(State,{SeqNum, TTL,OriginatorAddress},FromAddress),
   %----------------------
   % rebroadcast ogm:
-  if (OriginatorAddress /= {State#batmanProtocol_state.pid,node()}) and (TTL-1 > 0) -> %% check if im not the Originator. and if TTL>0
-    {CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors} = maps:get(OriginatorAddress,NewState#batmanProtocol_state.known),
-      if BestLink == FromAddress -> % i rebroadcast only if i received the msg from Best link
-              if IsNewSeq or IsSameTTL ->
+  MyAddr = {State#batmanProtocol_state.pid,node()},
+
+  if ((OriginatorAddress =/= MyAddr) and (TTL-1 > 0)) -> %% check if im not the Originator. and if TTL>0
+    {_CurrentSeqNumber, BestLink, _LastAwareTime, _ListOfNeighbors} = maps:get(OriginatorAddress,NewState#batmanProtocol_state.known),
+
+      if (BestLink =:= FromAddress) -> % i rebroadcast only if i received the msg from Best link
+              if (IsNewSeq or IsSameTTL) ->
                         OGM = {SeqNum, TTL-1 ,OriginatorAddress}, % Time to live -1
-                        gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM})
-              end
-      end
+                        gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM});
+                true-> ok
+              end;
+      true-> ok
+      end;
+  true-> ok
   end,
   {noreply, NewState};
 
@@ -165,37 +173,41 @@ terminate(_Reason, _State = #batmanProtocol_state{}) ->
 %% known ->                {key-> Pid@Node, Value -> {Current Seq Number, Best Link, Last Aware Time, list of neighbors}}
 %% list of neighbors ->    {Pid@Node,sorted-list of in window seq numbers, last TTL, last Valid Time}
 
-%%  processOgm -> receive the OGM and updates the know map accordingly
+
+%%  processOgm -> receive the OGM and updates the know map accordingly (folowing the BATMAN protocol)
 %%  returns -> {NewState,IsNewSeq,IsSameTTL}
 processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
   %first thing to check if the SeqNum is new, if not return State
   Known = State#batmanProtocol_state.known,
   IsKnown= maps:is_key(OriginatorAddress,Known),
-
  if IsKnown->
    %=====================in the map, update it=================
    KnownBatman = maps:get(OriginatorAddress,Known),
    {CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors} = KnownBatman,
-
+  castPlease({listofNeigh1,ListOfNeighbors}),
    Neighbor = getNeighbor(FromAddress,ListOfNeighbors,TTL), %returs the neighbor, or a new neighbor with an empty SeqList
    {_FromAdd,SeqList, LastTTL, LastValidTime} =Neighbor,
      if SeqList == [] -> % not a neighbor (yet)
         if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
-          NewKnowBatman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum), % return a new KnownBatman with everthing updated
+          NewKnowBatman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,lastTTL), % return a new KnownBatman with everthing updated
           {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false};
         true-> % not a new *Current* Seq Num
-         NewKnowBatman = {CurrentSeqNumber, BestLink, erlang:system_time(millisecond), ListOfNeighbors ++ {FromAddress,[SeqNum], TTL, erlang:system_time(millisecond)}},
+          castPlease({listofNeigh2,ListOfNeighbors ++ [{FromAddress,[SeqNum], TTL, erlang:system_time(millisecond)}]}),
+         NewKnowBatman = {CurrentSeqNumber, BestLink, erlang:system_time(millisecond), ListOfNeighbors ++ [{FromAddress,[SeqNum], TTL, erlang:system_time(millisecond)}]},
          {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
         end;
      true-> % neighbor already exists
-        IsNewSeq = lists:member(SeqNum,SeqList),
-        if IsNewSeq -> % a new Seq Num
+        IsNewSeq = not (lists:member(SeqNum,SeqList)),
+        if  IsNewSeq -> % a new Seq Num
             if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
               Batman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,TTL), % return a new KnownBatman with everthing updated
+              castPlease({seqNum00, SeqNum}),
               NewKnowBatman = updateBestLink(Batman), % change the best link
               {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false};
             true->  % not a new Current Seq Num *but* a new SeqNum
+
               Batman = addSeqNum(KnownBatman,FromAddress,SeqNum,lastTTl), % return a new KnownBatman with everthing updated
+              castPlease({seqNum01, SeqNum}),
               NewKnowBatman = updateBestLink(Batman), % change the best link
               {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
             end;
@@ -205,6 +217,7 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
        end;
   %=====================knownBatman not in the map, generate it=================
   true ->
+    castPlease({seqNum02, SeqNum}),
     NewKnown = maps:put(OriginatorAddress,{SeqNum,FromAddress,erlang:system_time(millisecond),[{FromAddress,[SeqNum],TTL,erlang:system_time(millisecond) }]},Known),
     {State#batmanProtocol_state{known = NewKnown},true,false} % IsNewSeq = true,IsSameTTL = false,
   end.
@@ -226,11 +239,11 @@ getNeighbor(FromAddress, [{FromAddress,SeqList,LastTTL,LastValidTime}|_],_) ->{F
 getNeighbor(FromAddress, [_|ListOfNeighbors],TTL) -> getNeighbor(FromAddress, ListOfNeighbors,TTL).
 
 
-
 % return a new KnownBatman with everything updated (uses addSeqNum)
 updateCurrSeqNum({_CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}, FromAddress, SeqNum,NewTTL) ->
+
   UpdatedListOfNeighbors = updateInWindow(ListOfNeighbors,SeqNum),
-  NewListOfNeighbors = addSeqNum({SeqNum, BestLink, LastAwareTime, UpdatedListOfNeighbors},FromAddress, SeqNum,NewTTL), %updates in window lists and adds the SeqNum to FromAddress
+  {_,_,_,NewListOfNeighbors} = addSeqNum({SeqNum, BestLink, LastAwareTime, UpdatedListOfNeighbors},FromAddress, SeqNum,NewTTL), %updates in window lists and adds the SeqNum to FromAddress
   {SeqNum, getBestLink(ListOfNeighbors,BestLink,0), erlang:system_time(millisecond), NewListOfNeighbors}.
 
 %returns lists of neighbors in the new in-window
@@ -246,22 +259,23 @@ updateInWindow(ListOfNeighbors, CurrSeqNum) ->NewLists = [{FromAddress,lists:fil
 addSeqNum({CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}, FromAddress, SeqNum,NewTTL) ->
   Neighbor= getNeighbor(FromAddress,ListOfNeighbors,ttlNotRelevant),
   NewNeighbor =addSeqNumtoNeighbor(Neighbor,SeqNum,NewTTL),
+
   NewListOfNeighbors = lists:delete(Neighbor,ListOfNeighbors) ++ [NewNeighbor],
   {CurrentSeqNumber, BestLink, LastAwareTime, NewListOfNeighbors}.
-addSeqNumtoNeighbor({FromAddress,SeqList,LastTTL,_LastValidTime}, SeqNum,lastTTl)  -> {FromAddress,lists:sort(SeqList ++ [SeqNum]),LastTTL,erlang:system_time(millisecond)};
-addSeqNumtoNeighbor({FromAddress,SeqList,_LastTTL,_LastValidTime}, SeqNum,NewTTL)  -> {FromAddress,lists:sort(SeqList ++ [SeqNum]),NewTTL,erlang:system_time(millisecond)}.
+addSeqNumtoNeighbor({FromAddress,SeqList,LastTTL,_LastValidTime}, SeqNum,lastTTl)  ->{FromAddress,lists:sort(SeqList ++ [SeqNum]),LastTTL,erlang:system_time(millisecond)};
+addSeqNumtoNeighbor({FromAddress,SeqList,_LastTTL,_LastValidTime}, SeqNum,NewTTL)  ->{FromAddress,lists:sort(SeqList ++ [SeqNum]),NewTTL,erlang:system_time(millisecond)}.
 
 
 
 %returns Batman with updated Best Link
 %Batman -> {Current Seq Number, Best Link, Last Aware Time, list of neighbors}}
+%% list of neighbors ->    {Pid@Node,sorted-list of in window seq numbers, last TTL, last Valid Time}
 updateBestLink({CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}) ->{CurrentSeqNumber, getBestLink(ListOfNeighbors,BestLink,0), LastAwareTime, ListOfNeighbors}.
 
 getBestLink([],BestLink,_) ->BestLink;
-getBestLink([{FromAddress,SeqList,LastTTL,LastValidTime}|ListOfNeighbors],BestLink,PacketSize) ->
-    if length(SeqList)>PacketSize -> getBestLink(ListOfNeighbors,{FromAddress,SeqList,LastTTL,LastValidTime},length(SeqList));
+getBestLink([{FromAddress,SeqList,_LastTTL,_LastValidTime}|ListOfNeighbors],BestLink,PacketSize) ->
+    if length(SeqList)>PacketSize -> getBestLink(ListOfNeighbors,FromAddress,length(SeqList));
       true ->getBestLink(ListOfNeighbors,BestLink,PacketSize)
     end.
-
 
 
