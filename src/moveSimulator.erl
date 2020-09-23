@@ -20,7 +20,7 @@
 
 -define(SERVER, ?MODULE).
 -define(updateEts ,5). %how many time per second to update the ETS's
--define(velMax , 5). %range of the random velocity of the node in meter/milisec
+-define(velMax , 50). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 -define(radius ,100).
 
