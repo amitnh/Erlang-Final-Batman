@@ -179,33 +179,30 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
 
    Neighbor = getNeighbor(FromAddress,ListOfNeighbors), %returs the neighbor, or a new neighbor with an empty SeqList
    {_FromAdd,SeqList, LastTTL, LastValidTime} =Neighbor,
-   if SeqList == [] -> % not a neighbor (yet)
-      if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
-        NewKnowBatman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum), % return a new KnownBatman with everthing updated
-        {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false};
-        true-> % not a new *Current* Seq Num
-       NewKnowBatman = {CurrentSeqNumber, BestLink, erlang:system_time(millisecond), ListOfNeighbors ++ {FromAddress,[SeqNum], TTL, erlang:system_time(millisecond)}},
-       {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
-      end;
-     true-> % neighbor already exists
-      IsNewSeq = lists:member(SeqNum,SeqList),
-      if IsNewSeq -> % a new Seq Num
+     if SeqList == [] -> % not a neighbor (yet)
         if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
-          Batman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum), % return a new KnownBatman with everthing updated
-          NewKnowBatman = updateBestLink(Batman), % change the best link
+          NewKnowBatman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum), % return a new KnownBatman with everthing updated
           {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false};
-        true->  % not a new Current Seq Num *but* a new SeqNum
-          Batman = addSeqNum(KnownBatman,FromAddress,SeqNum), % return a new KnownBatman with everthing updated
-          NewKnowBatman = updateBestLink(Batman), % change the best link
-          {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
-          end;
-        true-> %not a new Seq -> no process !
-        {State#batmanProtocol_state{},false,false}
-      end,
-
-     NewKnown = maps:put(OriginatorAddress,NewKnowBatman,Known),
-     {State#batmanProtocol_state{known = NewKnown},true,false} % IsNewSeq = true,IsSameTTL = false,
-     end;
+        true-> % not a new *Current* Seq Num
+         NewKnowBatman = {CurrentSeqNumber, BestLink, erlang:system_time(millisecond), ListOfNeighbors ++ {FromAddress,[SeqNum], TTL, erlang:system_time(millisecond)}},
+         {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
+        end;
+     true-> % neighbor already exists
+        IsNewSeq = lists:member(SeqNum,SeqList),
+        if IsNewSeq -> % a new Seq Num
+            if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
+              Batman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum), % return a new KnownBatman with everthing updated
+              NewKnowBatman = updateBestLink(Batman), % change the best link
+              {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false};
+            true->  % not a new Current Seq Num *but* a new SeqNum
+              Batman = addSeqNum(KnownBatman,FromAddress,SeqNum), % return a new KnownBatman with everthing updated
+              NewKnowBatman = updateBestLink(Batman), % change the best link
+              {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
+            end;
+        true-> %not a new Seq -> no process ! but we check if the LastTTL == TTL for Rebroadcasting later
+          {State#batmanProtocol_state{},false,LastTTL == TTL}
+        end
+       end;
   %=====================knownBatman not in the map, generate it=================
   true ->
     NewKnown = maps:put(OriginatorAddress,{SeqNum,FromAddress,erlang:system_time(millisecond),[{FromAddress,[SeqNum],TTL,erlang:system_time(millisecond) }]},Known),
