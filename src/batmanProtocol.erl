@@ -177,7 +177,7 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
    KnownBatman = maps:get(OriginatorAddress,Known),
    {CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors} = KnownBatman,
 
-   Neighbor = getNeighbor(FromAddress,ListOfNeighbors), %returs the neighbor, or a new neighbor with an empty SeqList
+   Neighbor = getNeighbor(FromAddress,ListOfNeighbors,TTL), %returs the neighbor, or a new neighbor with an empty SeqList
    {_FromAdd,SeqList, LastTTL, LastValidTime} =Neighbor,
      if SeqList == [] -> % not a neighbor (yet)
         if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
@@ -191,11 +191,11 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
         IsNewSeq = lists:member(SeqNum,SeqList),
         if IsNewSeq -> % a new Seq Num
             if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
-              Batman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum), % return a new KnownBatman with everthing updated
+              Batman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,TTL), % return a new KnownBatman with everthing updated
               NewKnowBatman = updateBestLink(Batman), % change the best link
               {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false};
             true->  % not a new Current Seq Num *but* a new SeqNum
-              Batman = addSeqNum(KnownBatman,FromAddress,SeqNum), % return a new KnownBatman with everthing updated
+              Batman = addSeqNum(KnownBatman,FromAddress,SeqNum,lastTTl), % return a new KnownBatman with everthing updated
               NewKnowBatman = updateBestLink(Batman), % change the best link
               {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
             end;
@@ -208,3 +208,60 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
     NewKnown = maps:put(OriginatorAddress,{SeqNum,FromAddress,erlang:system_time(millisecond),[{FromAddress,[SeqNum],TTL,erlang:system_time(millisecond) }]},Known),
     {State#batmanProtocol_state{known = NewKnown},true,false} % IsNewSeq = true,IsSameTTL = false,
   end.
+
+
+
+
+%================================================================
+%================================================================
+%=====================Aid funcitions=============================
+%================================================================
+%================================================================
+
+% getNeighbor(FromAddress,ListOfNeighbors,TTL) -> neighbor
+%returs the neighbor, or a new neighbor with an empty SeqList
+%% list of neighbors ->    {Pid@Node,sorted-list of in window seq numbers, last TTL, last Valid Time}
+getNeighbor(FromAddress, [],TTL) -> {FromAddress,[],TTL,erlang:system_time(millisecond)};
+getNeighbor(FromAddress, [{FromAddress,SeqList,LastTTL,LastValidTime}|_],_) ->{FromAddress,SeqList,LastTTL,LastValidTime};
+getNeighbor(FromAddress, [_|ListOfNeighbors],TTL) -> getNeighbor(FromAddress, ListOfNeighbors,TTL).
+
+
+
+% return a new KnownBatman with everything updated (uses addSeqNum)
+updateCurrSeqNum({_CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}, FromAddress, SeqNum,NewTTL) ->
+  UpdatedListOfNeighbors = updateInWindow(ListOfNeighbors,SeqNum),
+  NewListOfNeighbors = addSeqNum({SeqNum, BestLink, LastAwareTime, UpdatedListOfNeighbors},FromAddress, SeqNum,NewTTL), %updates in window lists and adds the SeqNum to FromAddress
+  {SeqNum, getBestLink(ListOfNeighbors,BestLink,0), erlang:system_time(millisecond), NewListOfNeighbors}.
+
+%returns lists of neighbors in the new in-window
+updateInWindow(ListOfNeighbors, CurrSeqNum) ->NewLists = [{FromAddress,lists:filter(fun(SeqNum) -> SeqNum > CurrSeqNum- ?windowSize end, SeqList), LastTTL, LastValidTime}||{FromAddress,SeqList, LastTTL, LastValidTime}<-ListOfNeighbors],
+  [{FromAddress,SeqList, LastTTL, LastValidTime}||{FromAddress,SeqList, LastTTL, LastValidTime}<-NewLists,length(SeqList)>0]. % removes the empty neighbors
+
+
+
+
+% return a new KnownBatman with SeqNum added to the Neighbor
+%Batman -> {Current Seq Number, Best Link, Last Aware Time, list of neighbors}}
+%if you dont want to change the TTL put in NewTTL->lastTTl
+addSeqNum({CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}, FromAddress, SeqNum,NewTTL) ->
+  Neighbor= getNeighbor(FromAddress,ListOfNeighbors,ttlNotRelevant),
+  NewNeighbor =addSeqNumtoNeighbor(Neighbor,SeqNum,NewTTL),
+  NewListOfNeighbors = lists:delete(Neighbor,ListOfNeighbors) ++ [NewNeighbor],
+  {CurrentSeqNumber, BestLink, LastAwareTime, NewListOfNeighbors}.
+addSeqNumtoNeighbor({FromAddress,SeqList,LastTTL,_LastValidTime}, SeqNum,lastTTl)  -> {FromAddress,lists:sort(SeqList ++ [SeqNum]),LastTTL,erlang:system_time(millisecond)};
+addSeqNumtoNeighbor({FromAddress,SeqList,_LastTTL,_LastValidTime}, SeqNum,NewTTL)  -> {FromAddress,lists:sort(SeqList ++ [SeqNum]),NewTTL,erlang:system_time(millisecond)}.
+
+
+
+%returns Batman with updated Best Link
+%Batman -> {Current Seq Number, Best Link, Last Aware Time, list of neighbors}}
+updateBestLink({CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}) ->{CurrentSeqNumber, getBestLink(ListOfNeighbors,BestLink,0), LastAwareTime, ListOfNeighbors}.
+
+getBestLink([],BestLink,_) ->BestLink;
+getBestLink([{FromAddress,SeqList,LastTTL,LastValidTime}|ListOfNeighbors],BestLink,PacketSize) ->
+    if length(SeqList)>PacketSize -> getBestLink(ListOfNeighbors,{FromAddress,SeqList,LastTTL,LastValidTime},length(SeqList));
+      true ->getBestLink(ListOfNeighbors,BestLink,PacketSize)
+    end.
+
+
+
