@@ -19,8 +19,8 @@
   code_change/3, castPlease/1, robinsInRadiusForRemote/2]).
 
 -define(SERVER, ?MODULE).
--define(updateEts ,5). %how many time per second to update the ETS's
--define(velMax , 50). %range of the random velocity of the node in meter/milisec
+-define(updateEts ,20). %how many time per second to update the ETS's
+-define(velMax , 20). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 -define(radius ,100).
 
@@ -38,7 +38,7 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(List::term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area,DemiZone]) ->
-  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone], [{debug,[trace]}]), %TODO change the name ?MODULE, it wont work with more then 1 computer
+  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
 %%  castPlease(moveSimulatorOnline),
   spawn_link(fun()->etsTimer(Pid) end),
   spawn_link(fun()->vectorTimer(Pid) end).
@@ -104,8 +104,14 @@ updatedXYlocations(State)->
   CurrTime = erlang:system_time(millisecond),
   DeltaTime = CurrTime - State#moveSimulator_state.time,
 
+
   X = X0 + math:cos(Dir * math:pi() / 180)*Vel*DeltaTime/1000, % x = vt , trigo
   Y = Y0 + math:sin(Dir * math:pi() / 180)*Vel*DeltaTime/1000,
+
+  %boarders check:
+  if ((X < 0) or (X > 2000) or (Y < 0) or (Y > 2000)) -> gen_server:cast(self(),{changeDir});
+   true -> ok
+  end,
 
   {X,Y,CurrTime}.
 %%---------------------------------------------------------------------------------------------------
@@ -139,6 +145,12 @@ handle_cast({updateMovementVector,CurrTime,Velocity,Direction}, State = #moveSim
 %%  castPlease(updateMovementVector),
   {noreply, State#moveSimulator_state{time = CurrTime,velocity = Velocity, direction = Direction}};
 
+
+handle_cast({changeDir}, State = #moveSimulator_state{}) ->
+  Direction = State#moveSimulator_state.direction,
+  NewDirection = (0 - Direction),
+{noreply, State#moveSimulator_state{direction = NewDirection}};
+
 %updateEts updates the location of my PID in the etsX and etsY
 handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   {X,Y,CurrTime} = updatedXYlocations(State),
@@ -168,7 +180,7 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   [{_,NewListY}] = listToUpdate(ets:lookup(etsY,RoundedNewY),RoundedNewY),
   ets:insert(etsX,[{RoundedNewX,NewListX}]), %insert the new Locations lists
   ets:insert(etsY,[{RoundedNewY,NewListY}]),
-  {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}; % todo check if it works
+  {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}};
 
 %%============sendToNeighbors=============================
 %% sends OGM to radius pids

@@ -19,9 +19,9 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 40). % number of processes in all the program "Robins"
+-define(N, 100). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
--define(updateMainEts, 5). % refresh rate to mainServer EtsRobins
+-define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
 
 -record(computerStateM_state, {computerNodes,computersArea, myArea}).
@@ -35,8 +35,8 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([ComputerNodes,ComputersArea]) ->
-%%  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[]),% [{debug,[trace]}]),
-  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[{debug,[trace]}]),
+%%  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[{debug,[trace]}]),
+  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[]),
   receive
     after 500-> ok
   end,
@@ -88,10 +88,6 @@ initRobins(MyArea) -> %spawn N/4 Robins
   {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
 handle_call(sendLocations, _From, State = #computerStateM_state{}) ->
   {reply, {ets:tab2list(etsX),ets:tab2list(etsY)}, State};
-
-handle_call({sendOGMtoNeighborsY,MyX,MyY,OGM,{Pid,Node}}, _From, State = #computerStateM_state{}) ->% todo todo only temp
-  {reply, [], State};
-
 
 handle_call(_Request, _From, State = #computerStateM_state{}) ->
   {reply, ok, State}.

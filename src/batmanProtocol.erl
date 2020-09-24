@@ -45,8 +45,10 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(PidMoveSimulator:: term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(PidMoveSimulator) ->
-  {ok,Pid} = gen_server:start_link(?MODULE, [PidMoveSimulator], [{debug,[trace]}]),
-  spawn_link(fun()->ogmLoop(Pid) end),
+  {ok,Pid} = gen_server:start_link(?MODULE, [PidMoveSimulator], []), %{debug,[trace]}
+  receive
+  after rand:uniform(?ORIGINATOR_INTERVAL) ->  spawn_link(fun()->ogmLoop(Pid) end) % every Robins start sending OGMs after random time up to 1 interval
+  end,
   {ok,Pid}. %sends cast to OGM every ORIGINATOR_INTERVAL
 
 
@@ -184,7 +186,6 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
    %=====================in the map, update it=================
    KnownBatman = maps:get(OriginatorAddress,Known),
    {CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors} = KnownBatman,
-  castPlease({listofNeigh1,ListOfNeighbors}),
    Neighbor = getNeighbor(FromAddress,ListOfNeighbors,TTL), %returs the neighbor, or a new neighbor with an empty SeqList
    {_FromAdd,SeqList, LastTTL, LastValidTime} =Neighbor,
      if SeqList == [] -> % not a neighbor (yet)
@@ -192,7 +193,6 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
           NewKnowBatman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,lastTTL), % return a new KnownBatman with everthing updated
           {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false};
         true-> % not a new *Current* Seq Num
-          castPlease({listofNeigh2,ListOfNeighbors ++ [{FromAddress,[SeqNum], TTL, erlang:system_time(millisecond)}]}),
          NewKnowBatman = {CurrentSeqNumber, BestLink, erlang:system_time(millisecond), ListOfNeighbors ++ [{FromAddress,[SeqNum], TTL, erlang:system_time(millisecond)}]},
          {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
         end;
@@ -201,13 +201,11 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
         if  IsNewSeq -> % a new Seq Num
             if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
               Batman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,TTL), % return a new KnownBatman with everthing updated
-              castPlease({seqNum00, SeqNum}),
               NewKnowBatman = updateBestLink(Batman), % change the best link
               {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false};
             true->  % not a new Current Seq Num *but* a new SeqNum
 
               Batman = addSeqNum(KnownBatman,FromAddress,SeqNum,lastTTl), % return a new KnownBatman with everthing updated
-              castPlease({seqNum01, SeqNum}),
               NewKnowBatman = updateBestLink(Batman), % change the best link
               {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
             end;
@@ -217,7 +215,6 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
        end;
   %=====================knownBatman not in the map, generate it=================
   true ->
-    castPlease({seqNum02, SeqNum}),
     NewKnown = maps:put(OriginatorAddress,{SeqNum,FromAddress,erlang:system_time(millisecond),[{FromAddress,[SeqNum],TTL,erlang:system_time(millisecond) }]},Known),
     {State#batmanProtocol_state{known = NewKnown},true,false} % IsNewSeq = true,IsSameTTL = false,
   end.
