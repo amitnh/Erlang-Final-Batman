@@ -142,12 +142,17 @@ handle_cast({sendMSG,To,Msg}, State = #batmanProtocol_state{}) ->
   Pid = State#batmanProtocol_state.pid,
   FromNeighbor = findBestLink(To,State#batmanProtocol_state{}),
   Reply = gen_server:call(Pid,{sendMsg,To,FromNeighbor,Msg}), % Reply == ok when FromNeighbor received the msg
-  if Reply == ok -> ok;
-  true -> deleteNeighbor(), % if neighbor didn't received the msg (Out Of Range / died for some reason) then
-                            % delete the neighbor and send the msg again to the next best link
-          gen_server:cast(self(),{sendMSG,To,Msg})
-  end,
-  {noreply, State#batmanProtocol_state};
+  if
+  Reply == ok -> % Msg sent everything ok
+    {noreply, State#batmanProtocol_state{}};
+
+  true ->% if neighbor didn't received the msg (Out Of Range / died for some reason) then
+         % 1.delete the neighbor 2.send the msg again to the next best link
+    NewKnown = deleteNeighbor(FromNeighbor,To,State#batmanProtocol_state.known),
+    gen_server:cast(self(),{sendMSG,To,Msg}),
+    {noreply, State#batmanProtocol_state{known = NewKnown}}
+  end;
+
 %%============================================================================================
 
 
@@ -296,3 +301,16 @@ findBestLink(To, State) ->
     {badmap,_map} -> badmap;
     true -> errorInfindBestLink
   end.
+
+% (list of neighbors ->    {Pid@Node,sorted-list of in window seq numbers, last TTL, last Valid Time})
+% deletes Neighbor from KnownBatman in Known, and returns a NewKnown without this Neighbor in KnownBatman
+deleteNeighbor(Neighbor, KnownBatman,Known) ->
+  {CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}= KnownBatman,
+  NewList = deleteNeighborFronList(ListOfNeighbors,Neighbor), %deletes the Neighbor from list
+  NewKnownBatman =  {CurrentSeqNumber, BestLink, LastAwareTime, NewList},% making new KnownBatman with the new list
+  maps:put(updateBestLink(NewKnownBatman),Known). %updates the BestLink in KnownBatman and put it in known (a NewKnown is returned)
+deleteNeighborFronList(ListOfNeighbors, Neighbor) ->
+  deleteNeighborFronList(ListOfNeighbors, Neighbor,[]).
+deleteNeighborFronList([{Neighbor,_,_,_}|ListOfNeighbors], Neighbor,NewList)-> NewList ++ ListOfNeighbors; %if i found the Neighbor put it out of the newList
+deleteNeighborFronList([H|ListOfNeighbors], Neighbor,NewList)-> deleteNeighborFronList(ListOfNeighbors,Neighbor,NewList++H).% if its not the Neighbor add it to the new List
+
