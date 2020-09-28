@@ -109,8 +109,10 @@ updatedXYlocations(State)->
   Y = Y0 + math:sin(Dir * math:pi() / 180)*Vel*DeltaTime/1000,
 
   %boarders check:
-  if ((X < 0) or (X > 2000) or (Y < 0) or (Y > 2000)) -> gen_server:cast(self(),{changeDir});
-   true -> ok
+  % if im out of range, i send a cast to myself to change the Direction
+  if ((X < 0) or (X > 2000) or (Y < 0) or (Y > 2000)) ->
+    gen_server:cast(self(),{changeDir});
+  true -> ok
   end,
 
   {X,Y,CurrTime}.

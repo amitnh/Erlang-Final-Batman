@@ -98,8 +98,6 @@ handle_cast({sendOGM}, State = #batmanProtocol_state{}) ->
 
 
 
-
-
 %%===============OGM recieved from direct neighbor=================================
 handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},OriginatorAddress}, State = #batmanProtocol_state{}) ->
   %----------------------
@@ -139,7 +137,18 @@ handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},FromAddress}, State = #batmanPr
   {noreply, NewState};
 
 %%============================================================================================
-
+%% send MSG to someone
+handle_cast({sendMSG,To,Msg}, State = #batmanProtocol_state{}) ->
+  Pid = State#batmanProtocol_state.pid,
+  FromNeighbor = findBestLink(To,State#batmanProtocol_state{}),
+  Reply = gen_server:call(Pid,{sendMsg,To,FromNeighbor,Msg}), % Reply == ok when FromNeighbor received the msg
+  if Reply == ok -> ok;
+  true -> deleteNeighbor(), % if neighbor didn't received the msg (Out Of Range / died for some reason) then
+                            % delete the neighbor and send the msg again to the next best link
+          gen_server:cast(self(),{sendMSG,To,Msg})
+  end,
+  {noreply, State#batmanProtocol_state};
+%%============================================================================================
 
 
 
@@ -276,3 +285,14 @@ getBestLink([{FromAddress,SeqList,_LastTTL,_LastValidTime}|ListOfNeighbors],Best
     end.
 
 
+
+%returns the best link to "To", if it doesn't exists it return an atom: "iDontKnowHim"
+findBestLink(To, State) ->
+  Known = State#batmanProtocol_state.known,
+  try {_CurrentSeqNumber, BestLink, _LastAwareTime, _ListOfNeighbors} = maps:get(To,Known),
+      BestLink
+  catch
+    {badkey,_key} -> iDontKnowHim;
+    {badmap,_map} -> badmap;
+    true -> errorInfindBestLink
+  end.
