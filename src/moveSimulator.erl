@@ -121,6 +121,7 @@ updatedXYlocations(State)->
   % if im out of range, i send a cast to myself to change the Direction
   if ((X < 0) or (X > 2000) or (Y < 0) or (Y > 2000)) ->
     gen_server:cast(self(),{changeDir});
+
   true -> ok
   end,
 
@@ -139,6 +140,15 @@ updatedXYlocations(State)->
   {noreply, NewState :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #moveSimulator_state{}} |
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
+
+handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg}, _From, State = #moveSimulator_state{}) ->
+  Node = node(),
+  if
+    Node == FromNeighborNode -> gen_server:call(FromNeighborPid,{reciveMsg,To,Msg}),
+                                {reply, ok, State};
+    true->gen_server:call(FromNeighborPid,{reciveMsg,To,Msg})
+  end,
+{reply, ok, State};
 handle_call(_Request, _From, State = #moveSimulator_state{}) ->
   {reply, ok, State}.
 
