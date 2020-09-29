@@ -89,6 +89,17 @@ initRobins(MyArea) -> %spawn N/4 Robins
 handle_call(sendLocations, _From, State = #computerStateM_state{}) ->
   {reply, {ets:tab2list(etsX),ets:tab2list(etsY)}, State};
 
+%       true -> {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,{updateBorders,X,Y})
+%Move simulator wants to know the new borders, if he is out of the area, he should terminate and a new move simulator should be created in the computer
+handle_call({updateBorders,X,Y}, _From, State = #computerStateM_state{}) ->
+  {StartX,EndX,StartY,EndY} = State#computerStateM_state.myArea,
+  if Y<StartY or Y > EndY or X < StartX or X > EndX ->
+    ToTerminate = true;
+    %TODO Send a cast to the right computer to lunch a move simulator in (X,Y).
+    true -> ToTerminate = false
+    end,
+  {reply, {StartX,EndX,StartY,EndY,ToTerminate}, State};
+
 handle_call(_Request, _From, State = #computerStateM_state{}) ->
   {reply, ok, State}.
 

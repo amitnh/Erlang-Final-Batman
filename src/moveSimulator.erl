@@ -23,6 +23,7 @@
 -define(velMax , 20). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 -define(radius ,100).
+-define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 
 -record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction,myBatman,pcPid}).
 
@@ -113,20 +114,16 @@ updatedXYlocations(State)->
   Y = Y0 + math:sin(Dir * math:pi() / 180)*Vel*DeltaTime/1000,
 
   %boarders check:
-
-  if (X0>EndX or X0<StartX)
-  {ToTerminate} = gen_server:call(PCPid,{updateBorders}),
-
-
-  % if im out of range, i send a cast to myself to change the Direction
   if ((X < 0) or (X > 2000) or (Y < 0) or (Y > 2000)) ->
     gen_server:cast(self(),{changeDir});
-
-  true -> ok
+    true -> ok
   end,
 
-
-  {X,Y,CurrTime,ToTerminate}.
+  if (X>EndX+?DemilitarizedZone or X<StartX-?DemilitarizedZone or Y>EndY+?DemilitarizedZone or Y<StartY-?DemilitarizedZone) ->
+     {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,{updateBorders,X,Y});
+    true -> ok
+  end,
+  {X,Y,CurrTime,NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate}.
 %%---------------------------------------------------------------------------------------------------
 
 
@@ -175,7 +172,7 @@ handle_cast({changeDir}, State = #moveSimulator_state{}) ->
 
 %updateEts updates the location of my PID in the etsX and etsY
 handle_cast({updateEts}, State = #moveSimulator_state{}) ->
-  {X,Y,CurrTime,toTerminate} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
+  {X,Y,CurrTime,NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
   if not(toTerminate) -> ok; %TODO terminate(batman+self)
 
     true->
@@ -205,7 +202,7 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
       [{_,NewListY}] = listToUpdate(ets:lookup(etsY,RoundedNewY),RoundedNewY),
       ets:insert(etsX,[{RoundedNewX,NewListX}]), %insert the new Locations lists
       ets:insert(etsY,[{RoundedNewY,NewListY}]),
-      {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}
+      {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime,startX = NewStartX,startY = NewStartY, endX = NewEndX, endY = NewEndY}}
   end;
 
 %%============sendToNeighbors=============================
