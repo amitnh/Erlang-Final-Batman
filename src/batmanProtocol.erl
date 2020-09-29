@@ -152,7 +152,6 @@ handle_cast({sendMSG,To,Msg}, State = #batmanProtocol_state{}) ->
     gen_server:cast(self(),{sendMSG,To,Msg}),
     {noreply, State#batmanProtocol_state{known = NewKnown}}
   end;
-
 %%============================================================================================
 
 
@@ -312,5 +311,5 @@ deleteNeighbor(Neighbor, KnownBatman,Known) ->
 deleteNeighborFronList(ListOfNeighbors, Neighbor) ->
   deleteNeighborFronList(ListOfNeighbors, Neighbor,[]).
 deleteNeighborFronList([{Neighbor,_,_,_}|ListOfNeighbors], Neighbor,NewList)-> NewList ++ ListOfNeighbors; %if i found the Neighbor put it out of the newList
-deleteNeighborFronList([H|ListOfNeighbors], Neighbor,NewList)-> deleteNeighborFronList(ListOfNeighbors,Neighbor,NewList++H).% if its not the Neighbor add it to the new List
+deleteNeighborFronList([H|ListOfNeighbors], Neighbor,NewList)-> deleteNeighborFronList(ListOfNeighbors,Neighbor,NewList++[H]).% if its not the Neighbor add it to the new List
 

@@ -136,7 +136,6 @@ paint(cast,refresh,State = #guiStateM_state{canvas = C}) ->
 paint(cast, _, State = #guiStateM_state{}) ->
   {next_state, paint, State}.
 
-
 handle_click(#wx{obj = _, userData = #{text := T, env := Env}},_Event) ->
   wx:set_env(Env),
   wxStaticText:setLabel(T, "Running.."),
