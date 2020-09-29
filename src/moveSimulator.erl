@@ -141,11 +141,14 @@ updatedXYlocations(State)->
 handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg}, _From, State = #moveSimulator_state{}) ->
   Node = node(),
   if
-    Node == FromNeighborNode -> gen_server:call(FromNeighborPid,{reciveMsg,To,Msg}),
-                                {reply, ok, State};
-    true->gen_server:call(FromNeighborPid,{reciveMsg,To,Msg})
+    Node == FromNeighborNode -> % if the node is in my pc send it to him directly
+      Reply = gen_server:call(FromNeighborPid,{reciveMsg,To,Msg});
+    true-> % if the neighbor is on other computer
+      PcPid = State#moveSimulator_state.pcPid,
+      Reply = gen_server:call(PcPid,{sendMsg,To,FromNeighborPid,Msg})
   end,
-{reply, ok, State};
+  {reply, Reply, State};
+
 handle_call(_Request, _From, State = #moveSimulator_state{}) ->
   {reply, ok, State}.
 
@@ -212,8 +215,7 @@ handle_cast({sendToNeighbors,OGM}, State = #moveSimulator_state{}) -> % Msg usua
 %%  castPlease({ListOfRobins,{ogm,OGM,{self(),node()}}}),
   [gen_server:cast(Pid,{ogm,OGM,{self(),node()}}) ||{Pid,_Node} <- ListOfRobins], % sends the OGM and the sender address to all the neighbors
   {noreply, State};
-handle_cast({sendMsg,Msg,{Pid,Node}}, State = #moveSimulator_state{}) ->
-  {noreply, State};
+
 
 %%===============OGM recieved=================================
 %%send it to the Batman
