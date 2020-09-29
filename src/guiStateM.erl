@@ -79,7 +79,15 @@ init([]) ->
   wxSizer:layout(MainSizer),
 
   %Frame is ready for display
+  DC = wxPaintDC:new(C),
 
+  wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
+  wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
+  wxDC:clear(DC),
+%%  wxDC:drawRectangle(DC,{0,0},{1000,1000}),
+%%  wxDC:drawLine(DC,{500,0},{500,1000}),
+%%  wxDC:drawLine(DC,{0,500},{1000,500}),
+  wxPaintDC:destroy(DC),
 %%  initcanvas(C),
   wxFrame:show(F),
   {ok, waiting, #guiStateM_state{env = Env, canvas = C,frame = F,panel = P,text = T}}.

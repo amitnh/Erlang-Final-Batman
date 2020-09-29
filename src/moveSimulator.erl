@@ -24,7 +24,7 @@
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 -define(radius ,100).
 
--record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction,myBatman}).
+-record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction,myBatman,pcPid}).
 
 
 %%test TODO delete
@@ -37,8 +37,8 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %% @doc Spawns the server and registers the local name (unique)
 -spec(start_link(List::term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link([Area,DemiZone]) ->
-  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
+start_link([Area,DemiZone,PCPid]) ->
+  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone,PCPid], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
 %%  castPlease(moveSimulatorOnline),
   spawn_link(fun()->etsTimer(Pid) end),
   spawn_link(fun()->vectorTimer(Pid) end).
@@ -72,10 +72,10 @@ vectorTimer(Pid)->
 -spec(init(Args :: term()) ->
   {ok, State :: #moveSimulator_state{}} | {ok, State :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([{StartX,EndX,StartY,EndY},DemiZone]) ->
+init([{StartX,EndX,StartY,EndY},DemiZone,PCPid]) ->
   {ok, MyBatman} = batmanProtocol:start_link(self()), %creates batmanProtocol and link it to this process
   {X,Y} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
-  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman}};
+  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
 init(_)-> castPlease(errorInArea).
 
 %%---------------------------------------------------------------------------------------------------
@@ -101,21 +101,31 @@ updatedXYlocations(State)->
   Y0 = State#moveSimulator_state.myY,
   Vel = State#moveSimulator_state.velocity,
   Dir = State#moveSimulator_state.direction,
+  PCPid = State#moveSimulator_state.pcPid,
   CurrTime = erlang:system_time(millisecond),
   DeltaTime = CurrTime - State#moveSimulator_state.time,
-
+  StartX = State#moveSimulator_state.startX,
+  StartY = State#moveSimulator_state.startY,
+  EndX = State#moveSimulator_state.endX,
+  EndY = State#moveSimulator_state.endY,
 
   X = X0 + math:cos(Dir * math:pi() / 180)*Vel*DeltaTime/1000, % x = vt , trigo
   Y = Y0 + math:sin(Dir * math:pi() / 180)*Vel*DeltaTime/1000,
 
   %boarders check:
+
+  if (X0>EndX or X0<StartX)
+  {ToTerminate} = gen_server:call(PCPid,{updateBorders}),
+
+
   % if im out of range, i send a cast to myself to change the Direction
   if ((X < 0) or (X > 2000) or (Y < 0) or (Y > 2000)) ->
     gen_server:cast(self(),{changeDir});
   true -> ok
   end,
 
-  {X,Y,CurrTime}.
+
+  {X,Y,CurrTime,ToTerminate}.
 %%---------------------------------------------------------------------------------------------------
 
 
@@ -155,34 +165,38 @@ handle_cast({changeDir}, State = #moveSimulator_state{}) ->
 
 %updateEts updates the location of my PID in the etsX and etsY
 handle_cast({updateEts}, State = #moveSimulator_state{}) ->
-  {X,Y,CurrTime} = updatedXYlocations(State),
-  RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
-  RoundedOldY = round(State#moveSimulator_state.myY),
-  Tempx = ets:lookup(etsX,RoundedOldX),
-  Tempy= ets:lookup(etsY,RoundedOldY),
-  if length(Tempx)>0 -> [{_,ListX}]= Tempx; %check if lookup is empty
-      true-> ListX =[]
-   end,
-  if length(Tempy)>0 -> [{_,ListY}]= Tempy;
-    true-> ListY =[]
-  end,
+  {X,Y,CurrTime,toTerminate} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
+  if not(toTerminate) -> ok; %TODO terminate(batman+self)
 
-  OldListX = ListX -- [self()],% remove the pid from the old location
-  OldListY = ListY -- [self()],
-  if (length(OldListX) > 0) ->  ets:insert(etsX,[{RoundedOldX,OldListX}]);%put back the old Locations lists if not empty
-    true-> ets:delete(etsX,RoundedOldX) % delete if empty
-  end, %
-  if (length(OldListY) > 0) ->  ets:insert(etsY,[{RoundedOldY,OldListY}]);%put back the old Locations lists if not empty
-    true-> ets:delete(etsY,RoundedOldY) % delete if empty
-  end,
+    true->
+      RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
+      RoundedOldY = round(State#moveSimulator_state.myY),
+      Tempx = ets:lookup(etsX,RoundedOldX),
+      Tempy= ets:lookup(etsY,RoundedOldY),
+      if length(Tempx)>0 -> [{_,ListX}]= Tempx; %check if lookup is empty
+          true-> ListX =[]
+       end,
+      if length(Tempy)>0 -> [{_,ListY}]= Tempy;
+        true-> ListY =[]
+      end,
 
-  RoundedNewX = round(X),
-  RoundedNewY = round(Y),
-  [{_,NewListX}] = listToUpdate(ets:lookup(etsX,RoundedNewX),RoundedNewX),
-  [{_,NewListY}] = listToUpdate(ets:lookup(etsY,RoundedNewY),RoundedNewY),
-  ets:insert(etsX,[{RoundedNewX,NewListX}]), %insert the new Locations lists
-  ets:insert(etsY,[{RoundedNewY,NewListY}]),
-  {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}};
+      OldListX = ListX -- [self()],% remove the pid from the old location
+      OldListY = ListY -- [self()],
+      if (length(OldListX) > 0) ->  ets:insert(etsX,[{RoundedOldX,OldListX}]);%put back the old Locations lists if not empty
+        true-> ets:delete(etsX,RoundedOldX) % delete if empty
+      end, %
+      if (length(OldListY) > 0) ->  ets:insert(etsY,[{RoundedOldY,OldListY}]);%put back the old Locations lists if not empty
+        true-> ets:delete(etsY,RoundedOldY) % delete if empty
+      end,
+
+      RoundedNewX = round(X),
+      RoundedNewY = round(Y),
+      [{_,NewListX}] = listToUpdate(ets:lookup(etsX,RoundedNewX),RoundedNewX),
+      [{_,NewListY}] = listToUpdate(ets:lookup(etsY,RoundedNewY),RoundedNewY),
+      ets:insert(etsX,[{RoundedNewX,NewListX}]), %insert the new Locations lists
+      ets:insert(etsY,[{RoundedNewY,NewListY}]),
+      {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}
+  end;
 
 %%============sendToNeighbors=============================
 %% sends OGM to radius pids
