@@ -111,7 +111,7 @@ handle_call({reciveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg}, _From, Stat
 %Move simulator wants to know the new borders, if he is out of the area, he should terminate and a new move simulator should be created in the computer
 handle_call({updateBorders,X,Y}, _From, State = #computerStateM_state{}) ->
   {StartX,EndX,StartY,EndY} = State#computerStateM_state.myArea,
-  if Y<StartY or Y > EndY or X < StartX or X > EndX ->
+  if ((Y<StartY) or (Y > EndY) or (X < StartX) or (X > EndX)) ->
     ToTerminate = true;
     %TODO Send a cast to the right computer to lunch a move simulator in (X,Y).
     true -> ToTerminate = false

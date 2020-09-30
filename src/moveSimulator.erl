@@ -119,7 +119,7 @@ updatedXYlocations(State)->
     true -> ok
   end,
 
-  if (X>EndX+?DemilitarizedZone or X<StartX-?DemilitarizedZone or Y>EndY+?DemilitarizedZone or Y<StartY-?DemilitarizedZone) ->
+  if ((X>EndX+?DemilitarizedZone) or (X<StartX-?DemilitarizedZone) or (Y>EndY+?DemilitarizedZone) or (Y<StartY-?DemilitarizedZone)) ->
      {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,{updateBorders,X,Y});
     true -> ok
   end,
