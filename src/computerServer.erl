@@ -112,7 +112,7 @@ handle_call({reciveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg}, _From, Stat
 handle_call({updateBorders, {X,Y,Dir,Vel}}, _From, State = #computerStateM_state{}) ->
   {StartX,EndX,StartY,EndY} = State#computerStateM_state.myArea,
 
-  if Y<StartY or Y > EndY or X < StartX or X > EndX ->
+  if ((Y<StartY) or (Y > EndY) or (X < StartX) or (X > EndX)) ->
       CompTrgt = getComputer(X,Y,State#computerStateM_state.computersArea,State#computerStateM_state.computerNodes),
       ToTerminate = true,
       try
@@ -232,6 +232,6 @@ neighbor(State,Dir) ->
 % getComputer(X,Y,State#computerStateM_state.computersArea,State#computerStateM_state.computerNodes),
 
 getComputer(_,_,[],[])-> nodeNotFound;
-getComputer(X,Y,[{StartX,EndX,StartY,EndY}|_],[Node|_]) when StartX<X and X<EndX and StartY<Y and Y<EndY ->Node;
-getComputer(X,Y,[{StartX,EndX,StartY,EndY}|Areas],[Node|Nodes]) when StartX<X and X<EndX and StartY<Y and Y<EndY ->
-  getComputer(X,Y,[_|Areas],[_,Nodes]).
+getComputer(X,Y,[{StartX,EndX,StartY,EndY}|_],[Node|_]) when ((StartX<X) and (X<EndX) and (StartY<Y) and (Y<EndY)) ->Node;
+getComputer(X,Y,[{StartX,EndX,StartY,EndY}|Areas],[Node|Nodes]) when ((StartX<X) and (X<EndX) and (StartY<Y) and (Y<EndY)) ->
+  noOK.%%  getComputer(X,Y,[_|Areas],[_,Nodes]). %TODO: tal fix this please
