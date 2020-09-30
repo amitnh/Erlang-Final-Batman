@@ -195,29 +195,32 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 %% send MSG to someone using the BATMAN Protocol
 handle_cast({sendMSG,To,Msg}, State = #moveSimulator_state{}) ->
   MyBatman = State#moveSimulator_state.myBatman,
-  {FromNeighborPid,FromNeighborNode} = gen_server:call(MyBatman, {findBestLink, To}),
-%%  Reply = gen_server:call(Pid,{sendMsg,To,FromNeighbor,Msg}), % Reply == ok when FromNeighbor received the msg
-  Node = node(),
-  try %if the call fails
-    if
-      Node == FromNeighborNode -> % if the node is in my pc send it to him directly
-        Reply = gen_server:call(FromNeighborPid,{reciveMsg,To,Msg});
-      true-> % if the neighbor is on other computer
-        PcPid = State#moveSimulator_state.pcPid,
-        Reply = gen_server:call(PcPid,{sendMsg,To,FromNeighborPid,Msg}),
-        if Reply == ok -> ok;
-            true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
-                   %1.delete the neighbor 2.send the msg again to the next best link
-            gen_server:cast(MyBatman, {deleteNeighbor, {FromNeighborPid,FromNeighborNode},To,Msg})
-            end,
-            {noreply, State#moveSimulator_state{}}
-    end
-  catch % if Msg didnt sent
-        true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
-                %1.delete the neighbor 2.send the msg again to the next best link
-                gen_server:cast(MyBatman, {deleteNeighbor, {FromNeighborPid,FromNeighborNode},To,Msg}),
-      {noreply, State#moveSimulator_state{}}
-  end;
+  FromNeighbor  = gen_server:call(MyBatman, {findBestLink, To}),
+  if is_tuple(FromNeighbor) ->
+    {FromNeighborPid,FromNeighborNode}= FromNeighbor,
+    Node = node(),
+    try %if the call fails
+      if
+        Node == FromNeighborNode -> % if the node is in my pc send it to him directly
+          Reply = gen_server:call(FromNeighborPid,{reciveMsg,To,Msg});
+        true-> % if the neighbor is on other computer
+          PcPid = State#moveSimulator_state.pcPid,
+          Reply = gen_server:call(PcPid,{sendMsg,To,FromNeighborPid,Msg}),
+          if Reply == ok -> ok;
+              true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
+                     %1.delete the neighbor 2.send the msg again to the next best link
+              gen_server:cast(MyBatman, {deleteNeighbor, {FromNeighborPid,FromNeighborNode},To,Msg})
+              end,
+              {noreply, State#moveSimulator_state{}}
+      end
+    catch % if Msg didnt sent
+          true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
+                  %1.delete the neighbor 2.send the msg again to the next best link
+                  gen_server:cast(MyBatman, {deleteNeighbor, {FromNeighborPid,FromNeighborNode},To,Msg}),
+        {noreply, State#moveSimulator_state{}}
+    end;
+  true-> FromNeighbor %i dont know "To"
+end;
 
 %=======================================================================================================
 

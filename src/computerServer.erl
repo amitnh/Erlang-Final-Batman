@@ -233,5 +233,4 @@ neighbor(State,Dir) ->
 
 getComputer(_,_,[],[])-> nodeNotFound;
 getComputer(X,Y,[{StartX,EndX,StartY,EndY}|_],[Node|_]) when ((StartX<X) and (X<EndX) and (StartY<Y) and (Y<EndY)) ->Node;
-getComputer(X,Y,[{StartX,EndX,StartY,EndY}|Areas],[Node|Nodes]) when ((StartX<X) and (X<EndX) and (StartY<Y) and (Y<EndY)) ->
-  noOK.%%  getComputer(X,Y,[_|Areas],[_,Nodes]). %TODO: tal fix this please
+getComputer(X,Y,[_|Areas],[_Node|Nodes]) -> getComputer(X,Y,Areas,Nodes).
