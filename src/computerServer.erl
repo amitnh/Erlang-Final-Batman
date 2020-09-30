@@ -109,12 +109,17 @@ handle_call({reciveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg}, _From, Stat
 
 %       true -> {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,{updateBorders,X,Y})
 %Move simulator wants to know the new borders, if he is out of the area, he should terminate and a new move simulator should be created in the computer
-handle_call({updateBorders,X,Y}, _From, State = #computerStateM_state{}) ->
+handle_call({updateBorders, {X,Y,Dir,Vel}}, _From, State = #computerStateM_state{}) ->
   {StartX,EndX,StartY,EndY} = State#computerStateM_state.myArea,
+
   if Y<StartY or Y > EndY or X < StartX or X > EndX ->
-    ToTerminate = true;
-    %TODO Send a cast to the right computer to lunch a move simulator in (X,Y).
-    true -> ToTerminate = false
+      CompTrgt = getComputer(X,Y,State#computerStateM_state.computersArea,State#computerStateM_state.computerNodes),
+      ToTerminate = true,
+      try
+        gen_server:cast({global,CompTrgt},{createBatman,{X,Y,Dir,Vel}})
+      catch _-> connectionError
+      end;
+    true -> ToTerminate = false %New borders
     end,
   {reply, {StartX,EndX,StartY,EndY,ToTerminate}, State};
 
@@ -129,6 +134,11 @@ handle_call(_Request, _From, State = #computerStateM_state{}) ->
   {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
 
 %%===================================================================================
+handle_cast({createBatman,RobinState}, State = #computerStateM_state{})->
+%spawn a Robin and monitor it, we add the DemilitarizedZone, so the moveSimulator will know it
+  spawn(moveSimulator,start_link,[[State#computerStateM_state.myArea,?DemilitarizedZone,RobinState]]),
+{noreply, State};
+
 handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{Pid,Node}}, State = #computerStateM_state{}) -> %todo todo only temp
   {StartX,EndX,_,_}= State#computerStateM_state.myArea,
   DisToLeft = MyX - StartX,
@@ -214,3 +224,14 @@ neighbor(State,Dir) ->
     up -> [Node ||{Node,{_Sx,_Ex,_Sy,Ey}}<- ZipLists, Ey = 2000];
     true -> [Node ||{Node,{_Sx,_Ex,Sy,_Ey}}<- ZipLists, Sy = 0] % case down
   end.
+
+
+%getComputer returns the target computer Node to transfer the movesimulator process to,
+% ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
+% ComputersArea-> [{startX,endX,startY,endY},...] size 4
+% getComputer(X,Y,State#computerStateM_state.computersArea,State#computerStateM_state.computerNodes),
+
+getComputer(_,_,[],[])-> nodeNotFound;
+getComputer(X,Y,[{StartX,EndX,StartY,EndY}|_],[Node|_]) when StartX<X and X<EndX and StartY<Y and Y<EndY ->Node;
+getComputer(X,Y,[{StartX,EndX,StartY,EndY}|Areas],[Node|Nodes]) when StartX<X and X<EndX and StartY<Y and Y<EndY ->
+  getComputer(X,Y,[_|Areas],[_,Nodes]).
