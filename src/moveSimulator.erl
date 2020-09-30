@@ -102,7 +102,7 @@ init([{StartX,EndX,StartY,EndY},DemiZone,PCPid,{X,Y,Dir,Vel}]) ->
       ets:insert(etsX,ListX),
       ets:insert(etsY,ListY),
       {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
-        demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=Vel,direction=Dir,myBatman = MyBatman,pcPid = PCPid}};
+        demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=Vel,direction=Dir,myBatman = MyBatman,pcPid = PCPid}}
   end;
 
 init(_)-> castPlease(errorInArea).
