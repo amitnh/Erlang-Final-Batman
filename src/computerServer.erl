@@ -72,7 +72,7 @@ getArea([_|T1],[_|T2],MyNode) -> getArea(T1,T2,MyNode).
 initRobins(MyArea) -> %spawn N/4 Robins
   Loop = lists:seq(1,?N div 4),
   %spawn a Robin and monitor it, we add the DemilitarizedZone, so the moveSimulator will know it
-  [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone]])|| _<- Loop].
+  [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self()]])|| _<- Loop].
 
 
 %% @private

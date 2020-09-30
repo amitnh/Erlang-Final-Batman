@@ -91,10 +91,10 @@ vectorTimer(Pid)->
 init([{StartX,EndX,StartY,EndY},DemiZone,PCPid,{X,Y,Dir,Vel}]) ->
   {ok, MyBatman} = batmanProtocol:start_link(self()), %creates batmanProtocol and link it to this process
 
-  if( (X==0) and (Y==0) and (Dir==0) and (Vel==0) )->%%initiating field
-      {X,Y} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
+  if( {X,Y,Dir,Vel} == {0,0,0,0} )->%%initiating field
+      {Xnew,Ynew} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
       {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
-        demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
+        demiZone = DemiZone,myX = Xnew,myY = Ynew,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
 
   true ->  %receiving a new batman from another computer
       ListX = listToUpdate(ets:lookup(etsX,X),X),
