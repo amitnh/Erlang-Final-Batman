@@ -40,12 +40,27 @@ start_link([ComputerNodes,ComputersArea]) ->
   receive
     after 500-> ok
   end,
-  spawn_link(fun()->updateMainServerEts() end).
+  spawn_link(fun()->updateMainServerEts() end),
+  spawn_link(fun()->testMsgSending() end).
 
 updateMainServerEts()-> receive
                           after 1000 div ?updateMainEts -> gen_server:cast({global, tal@ubuntu},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})
                         end, updateMainServerEts().
 
+testMsgSending()-> receive
+                        after 5000  -> First = ets:first(etsX),
+                       From = takeNelement(First,rand:uniform(?N div 4)),
+                       To = takeNelement(First,rand:uniform(?N div 4)),
+                        castPlease({sendingMsg,from,From,to,To}),
+                        gen_server:cast(From,{sendMsg,{To,node()},helloBanana})
+                        end, testMsgSending().
+
+takeNelement(X, 0) ->
+  [{_Key,[Pid|_]}]=ets:lookup(etsX,X),
+
+  Pid;
+takeNelement(X, N) ->
+  takeNelement(ets:next(etsX,X), N-1).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -91,16 +106,16 @@ handle_call(sendLocations, _From, State = #computerStateM_state{}) ->
 %sendMsg = the Msg needs to be sent to neighbor computerServer
 handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg}, _From, State = #computerStateM_state{}) ->
   try %if the call fails
-    Reply = gen_server:call({global, FromNeighborNode},{reciveMsg,To, {FromNeighborPid,FromNeighborNode},Msg}),
+    Reply = gen_server:call({global, FromNeighborNode},{receiveMsg,To, {FromNeighborPid,FromNeighborNode},Msg}),
     {reply, Reply, State}
   catch
     true-> {reply, notSent, State}
   end;
 
-%reciveMsg = recieved the msg from neighbor Computer and send it to the right pid
-handle_call({reciveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg}, _From, State = #computerStateM_state{}) ->
+%receiveMsg = recieved the msg from neighbor Computer and send it to the right pid
+handle_call({receiveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg}, _From, State = #computerStateM_state{}) ->
   try %if the call fails
-    Reply = gen_server:call(FromNeighborPid,{reciveMsg,To,Msg}),
+    Reply = gen_server:call(FromNeighborPid,{receiveMsg,To,Msg}),
     {reply, Reply, State}
   catch
     true-> {reply, notSent, State}
@@ -234,3 +249,4 @@ neighbor(State,Dir) ->
 getComputer(_,_,[],[])-> nodeNotFound;
 getComputer(X,Y,[{StartX,EndX,StartY,EndY}|_],[Node|_]) when ((StartX<X) and (X<EndX) and (StartY<Y) and (Y<EndY)) ->Node;
 getComputer(X,Y,[_|Areas],[_Node|Nodes]) -> getComputer(X,Y,Areas,Nodes).
+
