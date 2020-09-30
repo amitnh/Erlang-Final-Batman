@@ -88,11 +88,19 @@ initRobins(MyArea) -> %spawn N/4 Robins
 handle_call(sendLocations, _From, State = #computerStateM_state{}) ->
   {reply, {ets:tab2list(etsX),ets:tab2list(etsY)}, State};
 %%===================================================================================
-
+%sendMsg = the Msg needs to be sent to neighbor computerServer
 handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg}, _From, State = #computerStateM_state{}) ->
-
   try %if the call fails
     Reply = gen_server:call({global, FromNeighborNode},{reciveMsg,To, {FromNeighborPid,FromNeighborNode},Msg}),
+    {reply, Reply, State}
+  catch
+    true-> {reply, notSent, State}
+  end;
+
+%reciveMsg = recieved the msg from neighbor Computer and send it to the right pid
+handle_call({reciveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg}, _From, State = #computerStateM_state{}) ->
+  try %if the call fails
+    Reply = gen_server:call(FromNeighborPid,{reciveMsg,To,Msg}),
     {reply, Reply, State}
   catch
     true-> {reply, notSent, State}
