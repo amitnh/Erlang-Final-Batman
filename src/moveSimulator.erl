@@ -142,7 +142,7 @@ updatedXYlocations(State)->
     true -> ok
   end,
   %if X or Y are out of bounds, need to check if theres a new border or if a terminate is necessary
-  if (X>EndX+?DemilitarizedZone or X<StartX-?DemilitarizedZone or Y>EndY+?DemilitarizedZone or Y<StartY-?DemilitarizedZone) ->
+  if ((X>EndX+?DemilitarizedZone) or (X<StartX-?DemilitarizedZone) or (Y>EndY+?DemilitarizedZone) or (Y<StartY-?DemilitarizedZone)) ->
     try %wait for the computerServer to bring back an answer about the borders
       {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,
             {updateBorders,{X,Y,State#moveSimulator_state.direction,State#moveSimulator_state.velocity}}),
@@ -171,6 +171,11 @@ updatedXYlocations(State)->
   {stop, Reason :: term(), Reply :: term(), NewState :: #moveSimulator_state{}} |
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
 
+handle_call({reciveMsg,To,Msg}, _From, State = #moveSimulator_state{}) ->
+  if (To == {self(),node()}) -> castPlease(Msg); % case the msg is for me -> cast it
+    true-> gen_server:cast(self(),{sendMSG,To,Msg}) % case the msg is not for me -> pass it on
+  end,
+  {reply, ok, State};
 
 handle_call(_Request, _From, State = #moveSimulator_state{}) ->
   {reply, ok, State}.
@@ -209,37 +214,14 @@ handle_cast({sendMSG,To,Msg}, State = #moveSimulator_state{}) ->
              %1.delete the neighbor 2.send the msg again to the next best link
            gen_server:cast(MyBatman, {deleteNeighbor, {FromNeighborPid,FromNeighborNode},To,Msg})
   end,
-  {noreply, State#moveSimulator_state{}}.
+  {noreply, State#moveSimulator_state{}};
 
 %=======================================================================================================
-% case the msg is for me -> cast it
-handle_call({sendMsg,To,Msg}, _From, State = #moveSimulator_state{}) when (To == {self(),node()}) ->
-  castPlease(Msg),
-  {reply, ok, State};
-% case the msg is not for me -> pass it on
-handle_call({sendMsg,To,Msg}, _From, State = #moveSimulator_state{}) ->
-    gen_server:cast(self(),{sendMSG,To,Msg}),
-    {reply, ok, State};
-%=======================================================================================================
 
-handle_call({reciveMsg,To,Msg}, _From, State = #moveSimulator_state{}) ->
-  Node = node(),
-  try %if the call fails
-    if
-      Node == FromNeighborNode -> % if the node is in my pc send it to him directly
-        Reply = gen_server:call(FromNeighborPid,{reciveMsg,To,Msg});
-      true-> % if the neighbor is on other computer
-        PcPid = State#moveSimulator_state.pcPid,
-        Reply = gen_server:call(PcPid,{sendMsg,To,FromNeighborPid,Msg})
-    end,
-    {reply, Reply, State}
-  catch
-    true-> {reply, notSent, State}
-  end.
 %%============================================================================================
 handle_cast({updateBorders,NewStartX,NewEndX,NewStartY,NewEndY}, State = #moveSimulator_state{}) ->
 %%  castPlease(updateMovementVector),
-  {noreply, State#moveSimulator_state{startY = NewStartX,endX = NewEndX,startY = NewStartY,endY = NewEndY}};
+  {noreply, State#moveSimulator_state{startX = NewStartX,endX = NewEndX,startY = NewStartY,endY = NewEndY}};
 
 handle_cast({updateMovementVector,CurrTime,Velocity,Direction}, State = #moveSimulator_state{}) ->
 %%  castPlease(updateMovementVector),
