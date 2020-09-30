@@ -75,7 +75,6 @@ initRobins(MyArea) -> %spawn N/4 Robins
   [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone]])|| _<- Loop].
 
 
-
 %% @private
 %% @doc Handling call messages
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
@@ -88,6 +87,17 @@ initRobins(MyArea) -> %spawn N/4 Robins
   {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
 handle_call(sendLocations, _From, State = #computerStateM_state{}) ->
   {reply, {ets:tab2list(etsX),ets:tab2list(etsY)}, State};
+%%===================================================================================
+
+handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg}, _From, State = #computerStateM_state{}) ->
+
+  try %if the call fails
+    Reply = gen_server:call({global, FromNeighborNode},{reciveMsg,To, {FromNeighborPid,FromNeighborNode},Msg}),
+    {reply, Reply, State}
+  catch
+    true-> {reply, notSent, State}
+  end;
+%%===================================================================================
 
 handle_call(_Request, _From, State = #computerStateM_state{}) ->
   {reply, ok, State}.
@@ -107,12 +117,12 @@ handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{Pid,Node}}, State = #computerState
   if DisToRight < DisToLeft ->% im close to the right border
     if EndX < 2000 -> % there is a computer to te right
       [Node] = neighbor(State,right),
-      gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
+      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
     end;
   true -> % else DisToRight >= DisToLeft
     if StartX > 0 -> % there is a computer to the left
       [Node] = neighbor(State,left),
-      gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
+      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
     end
   end,
   {noreply, State};
@@ -123,12 +133,12 @@ handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{Pid,Node}}, State = #computerState
   if DisToDown < DisToUp ->% im close to the right border
     if EndY < 2000 -> % there is a computer to te right
       [Node] = neighbor(State,down),
-      gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
+      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
     end;
     true -> % else DisToRight >= DisToLeft
       if StartY > 0 -> % there is a computer to the left
         [Node] = neighbor(State,up),
-        gen_server:cast(Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
+        gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
       end
   end,
   {noreply, State};
@@ -140,6 +150,9 @@ handle_cast({Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}}}, State = #computerSt
   ListOfRobins = moveSimulator:robinsInRadiusForRemote(MyX,MyY),
   [gen_server:cast(Pid,{ogm,OGM,{Pid,Node}}) ||{Pid,_Node} <- ListOfRobins],
   {noreply, State};
+
+%%===================================================================================
+
 handle_cast(_Request, State = #computerStateM_state{}) ->
   {noreply, State}.
 %%===================================================================================

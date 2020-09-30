@@ -80,6 +80,11 @@ init([PidMoveSimulator]) ->
   {noreply, NewState :: #batmanProtocol_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #batmanProtocol_state{}} |
   {stop, Reason :: term(), NewState :: #batmanProtocol_state{}}).
+
+handle_call({findBestLink, To}, _From, State = #batmanProtocol_state{}) ->
+  BestLink = findBestLink(To,State), %finds the best link and returns it
+  {reply, BestLink, State};
+
 handle_call(_Request, _From, State = #batmanProtocol_state{}) ->
   {reply, ok, State}.
 
@@ -136,23 +141,11 @@ handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},FromAddress}, State = #batmanPr
   end,
   {noreply, NewState};
 
-%%============================================================================================
-%% send MSG to someone
-handle_cast({sendMSG,To,Msg}, State = #batmanProtocol_state{}) ->
-  Pid = State#batmanProtocol_state.pid,
-  FromNeighbor = findBestLink(To,State#batmanProtocol_state{}),
-  Reply = gen_server:call(Pid,{sendMsg,To,FromNeighbor,Msg}), % Reply == ok when FromNeighbor received the msg
-  if
-  Reply == ok -> % Msg sent everything ok
-    {noreply, State#batmanProtocol_state{}};
-
-  true ->% if neighbor didn't received the msg (Out Of Range / died for some reason) then
-         % 1.delete the neighbor 2.send the msg again to the next best link
-    NewKnown = deleteNeighbor(FromNeighbor,To,State#batmanProtocol_state.known),
-    gen_server:cast(self(),{sendMSG,To,Msg}),
-    {noreply, State#batmanProtocol_state{known = NewKnown}}
-  end;
-%%============================================================================================
+%Msg failed: delete neighbor and try sending the Msg again
+handle_cast({deleteNeighbor, FromNeighbor,To,Msg},State = #batmanProtocol_state{}) ->
+NewKnown = deleteNeighbor(FromNeighbor,To,State#batmanProtocol_state.known),
+gen_server:cast(State#batmanProtocol_state.pid,{sendMSG,To,Msg}),% send the MSG again
+{noreply, State#batmanProtocol_state{known = NewKnown}};
 
 
 
