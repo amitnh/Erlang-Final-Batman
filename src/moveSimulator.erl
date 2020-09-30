@@ -39,7 +39,7 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(List::term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area,DemiZone,PCPid]) ->
-  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone,PCPid], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
+  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone,PCPid,{0,0,0,0}], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
 %%  castPlease(moveSimulatorOnline),
   spawn_link(fun()->etsTimer(Pid) end),
   spawn_link(fun()->vectorTimer(Pid) end);
@@ -81,22 +81,29 @@ vectorTimer(Pid)->
 -spec(init(Args :: term()) ->
   {ok, State :: #moveSimulator_state{}} | {ok, State :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([{StartX,EndX,StartY,EndY},DemiZone,PCPid]) ->
-  {ok, MyBatman} = batmanProtocol:start_link(self()), %creates batmanProtocol and link it to this process
-  {X,Y} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
-  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
-    demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
+%%init([{StartX,EndX,StartY,EndY},DemiZone,PCPid]) ->
+%%  {ok, MyBatman} = batmanProtocol:start_link(self()), %creates batmanProtocol and link it to this process
+%%  {X,Y} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
+%%  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
+%%    demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
 
 %if a batman is switching computer with specific X,Y locations
 init([{StartX,EndX,StartY,EndY},DemiZone,PCPid,{X,Y,Dir,Vel}]) ->
   {ok, MyBatman} = batmanProtocol:start_link(self()), %creates batmanProtocol and link it to this process
-  ListX = listToUpdate(ets:lookup(etsX,X),X),
-  ListY = listToUpdate(ets:lookup(etsY,Y),Y),
-  ets:insert(etsX,ListX),
-  ets:insert(etsY,ListY),
-  {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
-    demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=Vel,direction=Dir,myBatman = MyBatman,pcPid = PCPid}};
 
+  if( (X==0) and (Y==0) and (Dir==0) and (Vel==0) )->%%initiating field
+      {X,Y} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
+      {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
+        demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
+
+  true ->  %receiving a new batman from another computer
+      ListX = listToUpdate(ets:lookup(etsX,X),X),
+      ListY = listToUpdate(ets:lookup(etsY,Y),Y),
+      ets:insert(etsX,ListX),
+      ets:insert(etsY,ListY),
+      {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
+        demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=Vel,direction=Dir,myBatman = MyBatman,pcPid = PCPid}};
+  end;
 
 init(_)-> castPlease(errorInArea).
 
