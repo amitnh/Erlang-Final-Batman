@@ -37,8 +37,7 @@
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputersArea-> [{startX,endX,startY,endY},...] size 4
 start_link(ComputerNodes,ComputersArea) ->
-    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}],[]),% [{debug,[trace]}]), %TODO delete trace
-    gen_server:cast({global, tal@ubuntu},{test,finishedStartLink}).
+    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}],[]).% [{debug,[trace]}]). %TODO delete trace
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -65,7 +64,7 @@ spawnComputer(ComputerNodes,ComputersArea,loop) -> [spawnComputer(ComputerNodes,
 % spawns a Computer at a specific node and monitors it
 spawnComputer(ComputerNodes,ComputersArea,Node) ->
   erlang:monitor_node(Node,true),  % makes the mainServer monitor the new computer at Node todo maybe i dont have to ?
-  spawn(Node,computerServer,start_link,[[ComputerNodes,ComputersArea]]).
+  spawn(Node,computerServer,start_link,[[ComputerNodes,ComputersArea,node()]]).
 
 
 

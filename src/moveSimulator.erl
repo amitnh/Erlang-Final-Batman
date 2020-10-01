@@ -178,9 +178,10 @@ updatedXYlocations(State)->
   {stop, Reason :: term(), Reply :: term(), NewState :: #moveSimulator_state{}} |
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
 
-handle_call({receiveMsg,To,Msg}, _From, State = #moveSimulator_state{}) ->
+handle_call({receiveMsg,To,Msg}, From, State = #moveSimulator_state{}) ->
+  castPlease({receiveMsg,from,From}),
   if (To == {self(),node()}) -> castPlease(Msg); % case the msg is for me -> cast it
-    true-> gen_server:cast(self(),{sendMsg,To,Msg}) % case the msg is not for me -> pass it on
+    true-> gen_server:cast(self(),{sendMsg,To, {From,node()},Msg}) % case the msg is not for me -> pass it on
   end,
   {reply, sent, State};
 
@@ -200,41 +201,44 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 
 %%============================================================================================
 %% send MSG to someone using the BATMAN Protocol
-handle_cast({sendMsg,To,Msg}, State = #moveSimulator_state{}) ->
+handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
   castPlease({cast, sendMsg,self(), received,To,Msg}),
   MyBatman = State#moveSimulator_state.myBatman,
-  FromNeighbor  = gen_server:call(MyBatman, {findBestLink, To}),
-  if is_tuple(FromNeighbor) -> % there where no problems, Best Link was found
-    {FromNeighborPid,FromNeighborNode}= FromNeighbor,
+  BestLink  = gen_server:call(MyBatman, {findBestLink, To}),
+  if is_tuple(BestLink) -> % there where no problems, Best Link was found
+    {BestLinkPid,BestLinkNode}= BestLink,
     Node = node(),
     try %if the call fails
       if
-        Node == FromNeighborNode -> % if the node is in my pc send it to him directly
-          Reply = gen_server:call(FromNeighborPid,{receiveMsg,To,Msg}),
+        (From == BestLink) -> % im not sending the msg back to the one that sent it to me, infinite loop
+                                    %1.delete the neighbor 2.send the msg again to the next best link
+                                        gen_server:cast(MyBatman, {deleteNeighbor, {BestLinkPid,BestLinkNode},To,Msg});
+        (Node == BestLinkNode) -> % if the node is in my pc send it to him directly
+          Reply = gen_server:call(BestLinkPid,{receiveMsg,To,Msg}),
           if
             (Reply == sent) -> {noreply, State#moveSimulator_state{}};
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                    %1.delete the neighbor 2.send the msg again to the next best link
-              gen_server:cast(MyBatman, {deleteNeighbor, {FromNeighborPid,FromNeighborNode},To,Msg})
+              gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg})
           end;
-        true -> % if the neighbor is on other computer
+        true -> % if the neighbor is on other computer and not the one that sent me the msg
           PcPid = State#moveSimulator_state.pcPid,
-          Reply = gen_server:call(PcPid,{sendMsg,To,FromNeighborPid,Msg}),
+          Reply = gen_server:call(PcPid,{sendMsg,To,BestLinkPid,Msg}),
           if
             (Reply == sent) -> {noreply, State#moveSimulator_state{}};
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                      %1.delete the neighbor 2.send the msg again to the next best link
-              gen_server:cast(MyBatman, {deleteNeighbor, {FromNeighborPid,FromNeighborNode},To,Msg})
+              gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg})
           end,
               {noreply, State#moveSimulator_state{}}
       end
     catch % if Msg didn't sent
           _-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                   %1.delete the neighbor 2.send the msg again to the next best link
-                  gen_server:cast(MyBatman, {deleteNeighbor, {FromNeighborPid,FromNeighborNode},To,Msg}),
+                  gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),
         {noreply, State#moveSimulator_state{}}
     end;
-  true-> {noreply, State#moveSimulator_state{}} %i dont know "To"
+  true-> {noreply, State#moveSimulator_state{}} %i dont know "To", cant reach him
 end;
 
 %=======================================================================================================

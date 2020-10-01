@@ -291,7 +291,7 @@ findBestLink(To, State) ->
   catch
     {badkey,_key} -> iDontKnowHim;
     {badmap,_map} -> badmap;
-    true -> errorInfindBestLink
+    _ -> errorInfindBestLink
   end.
 
 % (list of neighbors ->    {Pid@Node,sorted-list of in window seq numbers, last TTL, last Valid Time})

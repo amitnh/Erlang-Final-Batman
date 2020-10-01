@@ -34,31 +34,33 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %% @doc Spawns the server and registers the local name (unique)
 -spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link([ComputerNodes,ComputersArea]) ->
+start_link([ComputerNodes,ComputersArea,MainServerNode]) ->
 %%  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[{debug,[trace]}]),
   gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[]),
   receive
     after 500-> ok
   end,
-  spawn_link(fun()->updateMainServerEts() end),
+  spawn_link(fun()->updateMainServerEts(MainServerNode) end),
   spawn_link(fun()->testMsgSending() end).
 
-updateMainServerEts()-> receive
-                          after 1000 div ?updateMainEts -> gen_server:cast({global, tal@ubuntu},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})
-                        end, updateMainServerEts().
+updateMainServerEts(MainServerNode)-> receive
+                          after 1000 div ?updateMainEts -> gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})
+                        end, updateMainServerEts(MainServerNode).
 
 testMsgSending()-> receive
                         after 5000  -> First = ets:first(etsX),
-                       From = takeNelement(First,rand:uniform(?N div 4)),
-                       To = takeNelement(First,rand:uniform(?N div 4)),
+                       From = takeNelement(First,rand:uniform(?N div 8)),
+                       To = takeNelement(First,rand:uniform(?N div 8)),
                         castPlease({sendingMsg,from,From,to,To}),
-                        gen_server:cast(From,{sendMsg,{To,node()},helloBanana})
+                        gen_server:cast(From,{sendMsg,{To,node()},{first,msg},helloBanana})
                         end, testMsgSending().
 
 takeNelement(X, 0) ->
-  [{_Key,[Pid|_]}]=ets:lookup(etsX,X),
-
-  Pid;
+  try
+  [{_Key,[Pid|_]}]=ets:lookup(etsX,X), Pid
+  catch
+    _-> castPlease({errorintakeNelement,x,X}), ets:first(etsX)
+  end;
 takeNelement(X, N) ->
   takeNelement(ets:next(etsX,X), N-1).
 
