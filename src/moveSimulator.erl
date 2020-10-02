@@ -20,7 +20,7 @@
 
 -define(SERVER, ?MODULE).
 -define(updateEts ,20). %how many time per second to update the ETS's
--define(velMax , 20). %range of the random velocity of the node in meter/milisec
+-define(velMax , 100). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 -define(radius ,500).
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
@@ -154,7 +154,7 @@ updatedXYlocations(State)->
       {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,
             {updateBorders,{X,Y,State#moveSimulator_state.direction,State#moveSimulator_state.velocity}}),
       if ToTerminate ->
-          gen_server:stop(State#moveSimulator_state.myBatman,normal,1000),%Moving to another computer, Shut down Batman Server
+%%          gen_server:stop(State#moveSimulator_state.myBatman,normal,1000),%Moving to another computer, Shut down Batman Server
           gen_server:stop(self(),normal,1000);%Shut down MoveSimulator Server
         true -> gen_server:cast(self(),{updateBorders,NewStartX,NewEndX,NewStartY,NewEndY})
       end
