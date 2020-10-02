@@ -40,8 +40,8 @@ start_link([ComputerNodes,ComputersArea,MainServerNode]) ->
   receive
     after 500-> ok
   end,
-  spawn_link(fun()->updateMainServerEts(MainServerNode) end),
-  spawn_link(fun()->testMsgSending() end).
+  %%  spawn_link(fun()->testMsgSending() end),
+  spawn_link(fun()->updateMainServerEts(MainServerNode) end).
 
 updateMainServerEts(MainServerNode)-> receive
                           after 1000 div ?updateMainEts -> gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})

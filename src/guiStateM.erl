@@ -12,7 +12,7 @@
 -behaviour(gen_statem).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_statem callbacks
 -export([init/1, format_status/2, state_name/3, handle_event/4, terminate/3,
@@ -20,6 +20,7 @@
 -include_lib("wx/include/wx.hrl").
 -define(Height, 1000).
 -define(Width, 1000).
+-define(Green,?wxGREEN ).
 -define(RefreshRate, 20).
 -define(SERVER, ?MODULE).
 -record(guiStateM_state,
@@ -28,7 +29,8 @@
   env,
   panel,
   text,
-  canvas
+  canvas,
+  nodesList  %#[{Node,Color} , {node, Color },,,]
 }).
 %%-record(guiStateM_state, {}).
 
@@ -39,8 +41,8 @@
 %% @doc Creates a gen_statem process which calls Module:init/1 to
 %% initialize. To ensure a synchronized start-up procedure, this
 %% function does not return until Module:init/1 has returned.
-start_link() ->
-  gen_statem:start_link({global, ?SERVER}, ?MODULE, [], []).
+start_link(ComputerNodes) ->
+  gen_statem:start_link({global, ?SERVER}, ?MODULE, [ComputerNodes], []).
 
 %%%===================================================================
 %%% gen_statem callbacks
@@ -50,12 +52,15 @@ start_link() ->
 %% @doc Whenever a gen_statem is started using gen_statem:start/[3,4] or
 %% gen_statem:start_link/[3,4], this function is called by the new
 %% process to initialize.
-init([]) ->
+init([ComputerNodes]) ->
   % {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
 %%  ets:new(etsRobins,[set,public,named_table]),
 %%  ets:insert(etsRobins, [{pid1,{200,60}}, {pid2,{300,20}}, {pid3,{500,1000}}, {pid4,{40,800}}]),
-
+  Length = length(ComputerNodes),
+  Seq = lists:seq(1,Length),
   Env = wx:new(),     %%create a wx environment
+  NodesList = [{lists:nth(N,ComputerNodes),lists:nth(N,[?wxGREEN,?wxBLUE,?wxRED,?wxCYAN])}||N<-Seq],
+
   F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width+100,?Height}}]),  %Creates the main frame for the gui
   P = wxPanel:new(F, [{size, {?Width,?Height-100}}]), % a panel we will split with sizers
   C = wxPanel:new(P, [{style, ?wxFULL_REPAINT_ON_RESIZE},{size, {?Width,?Height-100}}]), %the main canvas to print on the points
@@ -90,7 +95,7 @@ init([]) ->
   wxPaintDC:destroy(DC),
 %%  initcanvas(C),
   wxFrame:show(F),
-  {ok, waiting, #guiStateM_state{env = Env, canvas = C,frame = F,panel = P,text = T}}.
+  {ok, waiting, #guiStateM_state{env = Env, canvas = C,frame = F,panel = P,text = T, nodesList = NodesList }}.
 
 
 
@@ -138,7 +143,7 @@ waiting(cast, _, State = #guiStateM_state{}) ->
 
 paint(cast,refresh,State = #guiStateM_state{canvas = C}) ->
 
-  do_refresh(C),
+  do_refresh(C, State#guiStateM_state.nodesList),
   {next_state, paint, State};
 
 paint(cast, _, State = #guiStateM_state{}) ->
@@ -155,7 +160,8 @@ timer()->
   end,
   timer().
 
-do_refresh(C)->
+do_refresh(C,NodesList)->
+
   EtsList = ets:tab2list(etsRobins),
   DC = wxPaintDC:new(C),
 
@@ -166,8 +172,15 @@ do_refresh(C)->
   wxDC:drawLine(DC,{500,0},{500,1000}),
   wxDC:drawLine(DC,{0,500},{1000,500}),
   wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),
-  [wxDC:drawCircle(DC, {X div 2,Y div 2}, 3) || {_,{X,Y}}<- EtsList],
+  [ paintCirclesinColors(DC,NodesList,Node,X,Y) || {{_Pid,Node},{X,Y}}<- EtsList],
   wxPaintDC:destroy(DC).
+
+paintCirclesinColors(DC,NodesList,Node,X,Y) ->%Set a different color for each node.
+  wxDC:setPen(DC, wxPen:new(getColor(Node,NodesList), [{width, 2}])) ,wxDC:drawCircle(DC, {X div 2,Y div 2}, 3).
+
+getColor(Node,[{Node,Color}|_])->Color;
+getColor(Node,[_|NodesList])->getColor(Node,NodesList).
+
 
 
 %%initcanvas(C) ->ok.
