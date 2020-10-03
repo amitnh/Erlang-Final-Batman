@@ -24,7 +24,7 @@
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
 
--record(computerStateM_state, {computerNodes,computersArea, myArea}).
+-record(computerStateM_state, {computerNodes,computersArea, myArea,myMonitor,mainServer}).
 %%test TODO delete
 castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
@@ -35,8 +35,9 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([ComputerNodes,ComputersArea,MainServerNode]) ->
+  Mymonitor = spawn_link(fun()->monitorRobins() end ),
 %%  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[{debug,[trace]}]),
-  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[]),
+  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea,Mymonitor,MainServerNode],[]),
   receive
     after 500-> ok
   end,
@@ -73,13 +74,13 @@ takeNelement(X, N) ->
 -spec(init(Args :: term()) ->
   {ok, State :: #computerStateM_state{}} | {ok, State :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([ComputerNodes,ComputersArea]) -> %gets the area of the computer, the borders.
+init([ComputerNodes,ComputersArea,Mymonitor,MainServerNode]) -> %gets the area of the computer, the borders.
   %the ETS is build like this: [{Location1,[pid1,pid2...]},{Location2,[pid1,pid2...]},....]
   ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   MyArea = getArea(ComputerNodes,ComputersArea,node()),
   initRobins(MyArea),   %% spawn N/4 Robins and monitors them
-  {ok, #computerStateM_state{computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea}}. %saves the area border
+  {ok, #computerStateM_state{computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea,myMonitor = Mymonitor,mainServer = MainServerNode}}. %saves the area border
 
 % gets My Area from lists of nodes and areas
 getArea([],[],_)-> areaCantBeFound;
@@ -198,7 +199,27 @@ handle_cast({Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}}}, State = #computerSt
   {noreply, State};
 
 %%===================================================================================
+%Sends a addRobin message to myMonitor to add to monitored processes
+handle_cast({monitorMe,From}, State = #computerStateM_state{}) ->
+  State#computerStateM_state.myMonitor !   {addRobin, From},
+  {noreply, State};
 
+%removes Robin from ETS and cast mainServer to do so
+handle_cast({removeRobin,Pid,X,Y}, State = #computerStateM_state{}) ->
+  removeRobin(Pid,X,Y, State),
+  {noreply, State};
+
+
+
+%TODO TODO
+%removes Robin from ETS and cast mainServer to do so(Same as above but without X,Y
+handle_cast({removeRobin,Pid}, State = #computerStateM_state{}) ->
+  {X,Y} = searchXYbyPid(Pid),
+  removeRobin(Pid,X,Y, State),
+  {noreply, State};
+
+
+%%===================================================================================
 handle_cast(_Request, State = #computerStateM_state{}) ->
   {noreply, State}.
 %%===================================================================================
@@ -252,3 +273,46 @@ getComputer(_,_,[],[])-> nodeNotFound;
 getComputer(X,Y,[{StartX,EndX,StartY,EndY}|_],[Node|_]) when ((StartX<X) and (X<EndX) and (StartY<Y) and (Y<EndY)) ->Node;
 getComputer(X,Y,[_|Areas],[_Node|Nodes]) -> getComputer(X,Y,Areas,Nodes).
 
+%removes Robin from ETS and cast mainServer to do so
+removeRobin(Pid,X,Y, State = #computerStateM_state{}) ->   {_,TempX} = ets:lookup(etsX,X),
+  {_,TempY}= ets:lookup(etsY,Y),
+  ListX = TempX -- [Pid],% remove the pid from the old location
+  ListY = TempY -- [Pid],
+  if length(ListX)>0 ->ets:insert(etsX,[{X,ListX}]);
+    true->  ets:delete(etsX,X)
+  end,
+  if length(ListY)>0 ->ets:insert(etsY,[{Y,ListY}]);
+    true->  ets:delete(etsY,Y)
+  end,
+  gen_server:cast({global, State#computerStateM_state.mainServer},{removeRobin,Pid}).
+
+
+monitorRobins(MyComputerServer) ->
+
+  receive
+    {addRobin, Pid} ->   erlang:monitor(process,Pid);
+    {'DOWN', Ref, process, Pid, {normal,X,Y}} ->
+      castPlease({ref,Ref,pid,Pid}),
+      gen_server:cast(MyComputerServer,{removeRobin, Pid,X,Y});
+    {'DOWN', Ref, process, Pid,  Reason} ->
+      gen_server:cast(MyComputerServer,{generate, Pid});
+    _ ->   ok
+  end,
+monitorRobins(MyComputerServer).
+
+searchXYbyPid(Pid) ->
+  FirstX = ets:first(etsX),
+  FirstY = ets:first(etsY),
+  X = search(etsX,FirstX,Pid),
+  Y = search(etsY,FirstY,Pid),
+  {X,Y}.
+
+%Look for The right X or Y for an existing Pid int he ets given
+search(_,'$end_of_table',_) -> notfound;
+search(Ets, Key,Pid) ->
+  {_Key,Pids} = ets:lookup(Key),
+  IsMember =  lists:member(Pid,Pids), %check if the pid is in the list of pids
+  if
+    IsMember-> Key;
+    true -> search(Ets,ets:next(Ets,Key),Pid)
+  end.

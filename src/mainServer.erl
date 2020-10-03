@@ -88,14 +88,14 @@ handle_call(_Request, _From, State = #mainServer_state{}) ->
 
 %takes a list of pids from ETSX or ETSY, and updates their location in the ETSROBINS
 updateEts(_,[],_,_)-> ok;
-updateEts(Location,[Pid|Rest],XorY,From)-> IsMember = ets:member(etsRobins,{Pid,From}),
-  if  IsMember -> [{_FromTuple,{X,Y}}] = ets:lookup(etsRobins,{Pid,From}), %if Robins already a member
-      if XorY == x -> ets:insert(etsRobins,{{Pid,From},{Location,Y}});
-        true -> ets:insert(etsRobins,{{Pid,From},{X,Location}})
+updateEts(Location,[Pid|Pids],XorY,Node)-> IsMember = ets:member(etsRobins,{Pid,Node}),
+  if  IsMember -> [{_FromTuple,{X,Y}}] = ets:lookup(etsRobins,{Pid,Node}), %if Robins already a member
+      if XorY == x -> ets:insert(etsRobins,{{Pid,Node},{Location,Y}});
+        true -> ets:insert(etsRobins,{{Pid,Node},{X,Location}})
       end;
-      true-> ets:insert(etsRobins,{{Pid,From},{Location,Location}}) %if Robins is not a member, he is new
+      true-> ets:insert(etsRobins,{{Pid,Node},{Location,Location}}) %if Robins is not a member, he is new
     end,
-  updateEts(Location,Rest,XorY,From). %recursion call
+  updateEts(Location,Pids,XorY,Node). %recursion call
 
 
 
@@ -118,7 +118,10 @@ handle_cast({etsUpdate,From,EtsX,EtsY}, State = #mainServer_state{}) ->
     [updateEts(Y,PidList,y,From)||{Y,PidList}<-EtsY] end),
   {noreply, State};
 
-
+%Removes a Robin from the ETSRobins
+handle_cast({removeRobin,Pid}, State = #mainServer_state{}) ->
+  ets:delete(etsRobins,Pid),
+  {noreply, State};
 
 
 handle_cast(_Request, State = #mainServer_state{}) ->

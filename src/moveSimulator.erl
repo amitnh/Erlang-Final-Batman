@@ -103,7 +103,8 @@ init([{StartX,EndX,StartY,EndY},DemiZone,PCPid,{X,Y,Dir,Vel}]) ->
       ets:insert(etsY,ListY),
       {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
         demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=Vel,direction=Dir,myBatman = MyBatman,pcPid = PCPid}}
-  end;
+  end,
+  gen_server:cast(PCPid,{monitorMe,self()});
 
 init(_)-> castPlease(errorInArea).
 
@@ -155,7 +156,7 @@ updatedXYlocations(State)->
             {updateBorders,{X,Y,State#moveSimulator_state.direction,State#moveSimulator_state.velocity}}),
       if ToTerminate ->
 %%          gen_server:stop(State#moveSimulator_state.myBatman,normal,1000),%Moving to another computer, Shut down Batman Server
-          gen_server:stop(self(),normal,1000);%Shut down MoveSimulator Server
+          gen_server:stop(self(), {normal,round(X),round(Y)},infinity);%Shut down MoveSimulator Server
         true -> gen_server:cast(self(),{updateBorders,NewStartX,NewEndX,NewStartY,NewEndY})
       end
     catch _-> innerConnectionError
