@@ -38,7 +38,8 @@
 % ComputersArea-> [{startX,endX,startY,endY},...] size 4
 start_link(ComputerNodes,ComputersArea) ->
     gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}],[]),% [{debug,[trace]}]). %TODO delete trace
-    guiStateM:start_link(ComputerNodes).
+
+  guiStateM:start_link(ComputerNodes).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -119,8 +120,10 @@ handle_cast({etsUpdate,From,EtsX,EtsY}, State = #mainServer_state{}) ->
   {noreply, State};
 
 %Removes a Robin from the ETSRobins
-handle_cast({removeRobin,Pid}, State = #mainServer_state{}) ->
-  ets:delete(etsRobins,Pid),
+handle_cast({removeRobin,Pid,Node}, State = #mainServer_state{}) ->
+  gen_server:cast({global, tal@ubuntu},{test,{removingPid,Pid,etsRobins,ets:tab2list(etsRobins)}}),
+  ets:delete(etsRobins, {Pid, Node}),
+gen_server:cast({global, tal@ubuntu},{test,{removedPid,Pid,etsRobins,ets:tab2list(etsRobins)}}),
   {noreply, State};
 
 

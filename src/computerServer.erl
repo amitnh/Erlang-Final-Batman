@@ -19,7 +19,7 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 12). % number of processes in all the program "Robins"
+-define(N, 40). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
@@ -35,35 +35,20 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([ComputerNodes,ComputersArea,MainServerNode]) ->
-  Mymonitor = spawn_link(fun()->monitorRobins() end ),
-%%  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[{debug,[trace]}]),
-  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea,Mymonitor,MainServerNode],[]),
-  receive
-    after 500-> ok
-  end,
+
+  {ok, Pid} =  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea,MainServerNode],[]),
+  castPlease({ok0}),
+%% gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea,MainServerNode],[]),
+  Mymonitor = spawn_link(fun()->monitorRobins(Pid) end ),%spawns a process to monitor all the move simulators.
+receive after 500-> ok end,
+
+  castPlease({ok1}),
+  gen_server:call(Pid,{updateMyMonitor,Mymonitor}),
+  monitorAllRobins(Mymonitor),
+  castPlease({ok2}),
+
   %%  spawn_link(fun()->testMsgSending() end),
   spawn_link(fun()->updateMainServerEts(MainServerNode) end).
-
-updateMainServerEts(MainServerNode)-> receive
-                          after 1000 div ?updateMainEts -> gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})
-                        end, updateMainServerEts(MainServerNode).
-
-testMsgSending()-> receive
-                        after 5000  -> First = ets:first(etsX),
-                       From = takeNelement(First,rand:uniform(?N div 8)),
-                       To = takeNelement(First,rand:uniform(?N div 8)),
-                        castPlease({sendingMsg,from,From,to,To}),
-                        gen_server:cast(From,{sendMsg,{To,node()},{first,msg},helloBanana})
-                        end, testMsgSending().
-
-takeNelement(X, 0) ->
-  try
-  [{_Key,[Pid|_]}]=ets:lookup(etsX,X), Pid
-  catch
-    _-> castPlease({errorintakeNelement,x,X}), ets:first(etsX)
-  end;
-takeNelement(X, N) ->
-  takeNelement(ets:next(etsX,X), N-1).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -74,13 +59,14 @@ takeNelement(X, N) ->
 -spec(init(Args :: term()) ->
   {ok, State :: #computerStateM_state{}} | {ok, State :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([ComputerNodes,ComputersArea,Mymonitor,MainServerNode]) -> %gets the area of the computer, the borders.
+init([ComputerNodes,ComputersArea,MainServerNode]) -> %gets the area of the computer, the borders.
   %the ETS is build like this: [{Location1,[pid1,pid2...]},{Location2,[pid1,pid2...]},....]
   ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   MyArea = getArea(ComputerNodes,ComputersArea,node()),
   initRobins(MyArea),   %% spawn N/4 Robins and monitors them
-  {ok, #computerStateM_state{computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea,myMonitor = Mymonitor,mainServer = MainServerNode}}. %saves the area border
+
+  {ok, #computerStateM_state{computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea,myMonitor = updatedLater ,mainServer = MainServerNode}}. %saves the area border
 
 % gets My Area from lists of nodes and areas
 getArea([],[],_)-> areaCantBeFound;
@@ -115,6 +101,9 @@ handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg}, _From, State =
     true-> {reply, notSent, State}
   end;
 
+handle_call({updateMyMonitor,Mymonitor}, _From, State = #computerStateM_state{}) ->
+{reply, ok, State#computerStateM_state{myMonitor = Mymonitor}};
+
 %receiveMsg = recieved the msg from neighbor Computer and send it to the right pid
 handle_call({receiveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg}, _From, State = #computerStateM_state{}) ->
   try %if the call fails
@@ -130,15 +119,15 @@ handle_call({receiveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg}, _From, Sta
 handle_call({updateBorders, {X,Y,Dir,Vel}}, _From, State = #computerStateM_state{}) ->
   {StartX,EndX,StartY,EndY} = State#computerStateM_state.myArea,
 
-  if ((Y<StartY) or (Y > EndY) or (X < StartX) or (X > EndX)) ->
+  if ((Y<StartY) or (Y > EndY) or (X < StartX) or (X > EndX)) ->%check if the movesim have old borders
       CompTrgt = getComputer(X,Y,State#computerStateM_state.computersArea,State#computerStateM_state.computerNodes),
       ToTerminate = true,
       try
-        gen_server:cast({global,CompTrgt},{createBatman,{X,Y,Dir,Vel}})
+        gen_server:cast({global,CompTrgt},{createBatman,{round(X),round(Y),Dir,Vel}})
       catch _-> connectionError
       end;
     true -> ToTerminate = false %New borders
-    end,
+  end,
   {reply, {StartX,EndX,StartY,EndY,ToTerminate}, State};
 
 handle_call(_Request, _From, State = #computerStateM_state{}) ->
@@ -152,9 +141,9 @@ handle_call(_Request, _From, State = #computerStateM_state{}) ->
   {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
 
 %%===================================================================================
-handle_cast({createBatman,RobinState}, State = #computerStateM_state{})->
+handle_cast({createBatman,{X,Y,Dir,Vel}}, State = #computerStateM_state{})->
 %spawn a Robin and monitor it, we add the DemilitarizedZone, so the moveSimulator will know it
-  spawn(moveSimulator,start_link,[[State#computerStateM_state.myArea,?DemilitarizedZone,RobinState]]),
+  spawn(moveSimulator,start_link,[[State#computerStateM_state.myArea,?DemilitarizedZone,self(),{X,Y,Dir,Vel}]]),
 {noreply, State};
 
 handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{Pid,Node}}, State = #computerStateM_state{}) -> %todo todo only temp
@@ -204,19 +193,21 @@ handle_cast({monitorMe,From}, State = #computerStateM_state{}) ->
   State#computerStateM_state.myMonitor !   {addRobin, From},
   {noreply, State};
 
-%removes Robin from ETS and cast mainServer to do so
-handle_cast({removeRobin,Pid,X,Y}, State = #computerStateM_state{}) ->
-  removeRobin(Pid,X,Y, State),
-  {noreply, State};
-
-
-
-%TODO TODO
 %removes Robin from ETS and cast mainServer to do so(Same as above but without X,Y
 handle_cast({removeRobin,Pid}, State = #computerStateM_state{}) ->
   {X,Y} = searchXYbyPid(Pid),
+  castPlease({removing,pid,Pid,xy,X,Y,ets:tab2list(etsX),ets:tab2list(etsY)}),
   removeRobin(Pid,X,Y, State),
   {noreply, State};
+
+
+
+%Robin crashed so we generate a new one
+handle_cast({generateRobin}, State = #computerStateM_state{}) ->
+  MyArea = State#computerStateM_state.myArea,
+  spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self()]]),
+  {noreply, State};
+
 
 
 %%===================================================================================
@@ -274,8 +265,9 @@ getComputer(X,Y,[{StartX,EndX,StartY,EndY}|_],[Node|_]) when ((StartX<X) and (X<
 getComputer(X,Y,[_|Areas],[_Node|Nodes]) -> getComputer(X,Y,Areas,Nodes).
 
 %removes Robin from ETS and cast mainServer to do so
-removeRobin(Pid,X,Y, State = #computerStateM_state{}) ->   {_,TempX} = ets:lookup(etsX,X),
-  {_,TempY}= ets:lookup(etsY,Y),
+removeRobin(Pid,X,Y, State = #computerStateM_state{}) ->
+  [ {_,TempX}] = ets:lookup(etsX,X),
+  [{_, TempY}]= ets:lookup(etsY,Y),
   ListX = TempX -- [Pid],% remove the pid from the old location
   ListY = TempY -- [Pid],
   if length(ListX)>0 ->ets:insert(etsX,[{X,ListX}]);
@@ -284,19 +276,29 @@ removeRobin(Pid,X,Y, State = #computerStateM_state{}) ->   {_,TempX} = ets:looku
   if length(ListY)>0 ->ets:insert(etsY,[{Y,ListY}]);
     true->  ets:delete(etsY,Y)
   end,
-  gen_server:cast({global, State#computerStateM_state.mainServer},{removeRobin,Pid}).
+  castPlease({removeingRobin,Pid}),
+  %cast to main server to remove the pid from the main etsRobins
+  MainServerNode = State#computerStateM_state.mainServer,
+  gen_server:cast({global, MainServerNode},{removeRobin,Pid,node()}). % todo change
+
 
 
 monitorRobins(MyComputerServer) ->
-
   receive
-    {addRobin, Pid} ->   erlang:monitor(process,Pid);
-    {'DOWN', Ref, process, Pid, {normal,X,Y}} ->
-      castPlease({ref,Ref,pid,Pid}),
-      gen_server:cast(MyComputerServer,{removeRobin, Pid,X,Y});
+    {addRobin, Pid} ->
+      castPlease({monitoring,Pid}),
+      erlang:monitor(process,Pid);
+
+    {'DOWN', Ref, process, Pid, normal} ->
+      castPlease({normal,ref,Ref,pid,Pid}),
+      gen_server:cast(MyComputerServer,{removeRobin, Pid});
+
     {'DOWN', Ref, process, Pid,  Reason} ->
-      gen_server:cast(MyComputerServer,{generate, Pid});
-    _ ->   ok
+      castPlease({notnormal,ref,Ref,pid,Pid,reason,Reason}),
+      gen_server:cast(MyComputerServer,{removeRobin, Pid}),
+      gen_server:cast(MyComputerServer,{generateRobin});
+
+    Msg ->   castPlease({zeze,Msg})
   end,
 monitorRobins(MyComputerServer).
 
@@ -310,9 +312,36 @@ searchXYbyPid(Pid) ->
 %Look for The right X or Y for an existing Pid int he ets given
 search(_,'$end_of_table',_) -> notfound;
 search(Ets, Key,Pid) ->
-  {_Key,Pids} = ets:lookup(Key),
+  [{_Key, Pids}] = ets:lookup(Ets,Key),
   IsMember =  lists:member(Pid,Pids), %check if the pid is in the list of pids
   if
     IsMember-> Key;
-    true -> search(Ets,ets:next(Ets,Key),Pid)
+    true ->
+        search(Ets,ets:next(Ets,Key),Pid)
   end.
+
+% sending monitorMe cast to myComputerServer for every pid in the ets
+monitorAllRobins(MyMonitor) ->
+  [([MyMonitor ! {addRobin,Pid} ||Pid<-Pids])||{_Key,Pids}<-ets:tab2list(etsX)].
+
+
+updateMainServerEts(MainServerNode)-> receive
+                                      after 1000 div ?updateMainEts -> gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})
+                                      end, updateMainServerEts(MainServerNode).
+
+testMsgSending()-> receive
+                   after 5000  -> First = ets:first(etsX),
+    From = takeNelement(First,rand:uniform(?N div 8)),
+    To = takeNelement(First,rand:uniform(?N div 8)),
+    castPlease({sendingMsg,from,From,to,To}),
+    gen_server:cast(From,{sendMsg,{To,node()},{first,msg},helloBanana})
+                   end, testMsgSending().
+
+takeNelement(X, 0) ->
+  try
+    [{_Key,[Pid|_]}]=ets:lookup(etsX,X), Pid
+  catch
+    _-> castPlease({errorintakeNelement,x,X}), ets:first(etsX)
+  end;
+takeNelement(X, N) ->
+  takeNelement(ets:next(etsX,X), N-1).

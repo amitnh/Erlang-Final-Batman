@@ -39,17 +39,17 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 -spec(start_link(List::term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area,DemiZone,PCPid]) ->
-  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone,PCPid,{0,0,0,0}], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
-%%  castPlease(moveSimulatorOnline),
-  spawn_link(fun()->etsTimer(Pid) end),
+  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone,PCPid,{0,0,0,0}], []),%{debug,[trace]}
+  spawn_link(fun()->etsTimer(Pid) end) ,
   spawn_link(fun()->vectorTimer(Pid) end);
 
 %if a batman is switching computer
 start_link([Area,DemiZone,PCPid,{X,Y,Dir,Vel}]) ->
-  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone,PCPid,{X,Y,Dir,Vel}], []), %TODO change the name ?MODULE, it wont work with more then 1 computer
-%%  castPlease(moveSimulatorOnline),
+  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone,PCPid,{X,Y,Dir,Vel}], []),%{debug,[trace]}
+
   spawn_link(fun()->etsTimer(Pid) end),
-  spawn_link(fun()->vectorTimer(Pid) end).
+  spawn_link(fun()->vectorTimer(Pid) end),
+  gen_server:cast(PCPid,{monitorMe,Pid}).
 
 
 %send a cast to update the main ets's every ?updateEts milisecounds
@@ -97,14 +97,13 @@ init([{StartX,EndX,StartY,EndY},DemiZone,PCPid,{X,Y,Dir,Vel}]) ->
         demiZone = DemiZone,myX = Xnew,myY = Ynew,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
 
   true ->  %receiving a new batman from another computer
-      ListX = listToUpdate(ets:lookup(etsX,X),X),
+    ListX = listToUpdate(ets:lookup(etsX,X),X),
       ListY = listToUpdate(ets:lookup(etsY,Y),Y),
       ets:insert(etsX,ListX),
       ets:insert(etsY,ListY),
       {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
         demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=Vel,direction=Dir,myBatman = MyBatman,pcPid = PCPid}}
-  end,
-  gen_server:cast(PCPid,{monitorMe,self()});
+  end;
 
 init(_)-> castPlease(errorInArea).
 
@@ -146,24 +145,27 @@ updatedXYlocations(State)->
 
   %boarders check:
   if ((X < 0) or (X > 2000) or (Y < 0) or (Y > 2000)) ->
-    gen_server:cast(self(),{changeDir});
-    true -> ok
-  end,
-  %if X or Y are out of bounds, need to check if theres a new border or if a terminate is necessary
-  if ((X>EndX+?DemilitarizedZone) or (X<StartX-?DemilitarizedZone) or (Y>EndY+?DemilitarizedZone) or (Y<StartY-?DemilitarizedZone)) ->
-    try %wait for the computerServer to bring back an answer about the borders
-      {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,
-            {updateBorders,{X,Y,State#moveSimulator_state.direction,State#moveSimulator_state.velocity}}),
-      if ToTerminate ->
-%%          gen_server:stop(State#moveSimulator_state.myBatman,normal,1000),%Moving to another computer, Shut down Batman Server
-          gen_server:stop(self(), {normal,round(X),round(Y)},infinity);%Shut down MoveSimulator Server
-        true -> gen_server:cast(self(),{updateBorders,NewStartX,NewEndX,NewStartY,NewEndY})
-      end
-    catch _-> innerConnectionError
-    end;
-  true -> ok
-  end,
-  {X,Y,CurrTime}.
+            gen_server:cast(self(),{changeDir}),
+    {X0,Y0,CurrTime};
+    true ->  %if X or Y are out of bounds, need to check if theres a new border or if a terminate is necessary
+            if ((X>EndX+?DemilitarizedZone) or (X<StartX-?DemilitarizedZone) or (Y>EndY+?DemilitarizedZone) or (Y<StartY-?DemilitarizedZone)) ->
+              try %wait for the computerServer to bring back an answer about the borders
+                {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,{updateBorders,{round(X),round(Y),State#moveSimulator_state.direction,State#moveSimulator_state.velocity}}),
+                if ToTerminate ->
+                  gen_server:cast(self(),{stopNormally});
+                  %gen_server:stop(self());%Shut down MoveSimulator Server
+      %%          gen_server:stop(State#moveSimulator_state.myBatman,normal,1000),%Moving to another computer, Shut down Batman Server
+      %%        gen_server:stop(self(), {normal,round(X),round(Y)},infinity);%Shut down MoveSimulator Server
+                  true -> gen_server:cast(self(),{updateBorders,NewStartX,NewEndX,NewStartY,NewEndY})
+                end
+              catch _-> innerConnectionError
+              end;
+              true -> ok
+            end,
+
+      {X,Y,CurrTime}
+  end.
+
 %%---------------------------------------------------------------------------------------------------
 %%,startX = NewStartX,startY = NewStartY, endX = NewEndX, endY = NewEndY
 
@@ -264,8 +266,10 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
   {X,Y,CurrTime} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
     RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
     RoundedOldY = round(State#moveSimulator_state.myY),
+
     Tempx = ets:lookup(etsX,RoundedOldX),
-    Tempy= ets:lookup(etsY,RoundedOldY),
+    Tempy = ets:lookup(etsY,RoundedOldY),
+
     if length(Tempx)>0 -> [{_,ListX}]= Tempx; %check if lookup is empty
         true-> ListX =[]
      end,
@@ -306,6 +310,8 @@ handle_cast({ogm,OGM,{Pid,Node}}, State = #moveSimulator_state{}) ->
   gen_server:cast(Batman,{ogm,OGM,{Pid,Node}}),
 {noreply, State};
 
+handle_cast({stopNormally}, State = #moveSimulator_state{}) ->
+{stop, normal, State};
 
 handle_cast(_Request, State = #moveSimulator_state{}) ->
   {noreply, State}.
@@ -327,7 +333,9 @@ handle_info(_Info, State = #moveSimulator_state{}) ->
 %% with Reason. The return value is ignored.
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #moveSimulator_state{}) -> term()).
+
 terminate(_Reason, _State = #moveSimulator_state{}) ->
+  castPlease({pid,self(),terminating}),
   ok.
 
 %% @private
