@@ -19,8 +19,8 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 40). % number of processes in all the program "Robins"
--define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
+-define(N, 20). % number of processes in all the program "Robins"
+-define(DemilitarizedZone, 0). % how much area to add to each computer, "Demilitarized zone".
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
 
@@ -47,7 +47,7 @@ receive after 500-> ok end,
   monitorAllRobins(Mymonitor),
   castPlease({ok2}),
 
-  %%  spawn_link(fun()->testMsgSending() end),
+    spawn_link(fun()->testMsgSending() end),
   spawn_link(fun()->updateMainServerEts(MainServerNode) end).
 
 %%%===================================================================
@@ -93,9 +93,9 @@ handle_call(sendLocations, _From, State = #computerStateM_state{}) ->
   {reply, {ets:tab2list(etsX),ets:tab2list(etsY)}, State};
 %%===================================================================================
 %sendMsg = the Msg needs to be sent to neighbor computerServer
-handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg}, _From, State = #computerStateM_state{}) ->
+handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg,MoveSimFrom}, _From, State = #computerStateM_state{}) ->
   try %if the call fails
-    Reply = gen_server:call({global, FromNeighborNode},{receiveMsg,To, {FromNeighborPid,FromNeighborNode},Msg}),
+    Reply = gen_server:call({global, FromNeighborNode},{receiveMsg,To, {FromNeighborPid,FromNeighborNode},Msg,MoveSimFrom}),
     {reply, Reply, State}
   catch
     true-> {reply, notSent, State}
@@ -105,9 +105,9 @@ handle_call({updateMyMonitor,Mymonitor}, _From, State = #computerStateM_state{})
 {reply, ok, State#computerStateM_state{myMonitor = Mymonitor}};
 
 %receiveMsg = recieved the msg from neighbor Computer and send it to the right pid
-handle_call({receiveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg}, _From, State = #computerStateM_state{}) ->
+handle_call({receiveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg,MoveSimFrom}, _From, State = #computerStateM_state{}) ->
   try %if the call fails
-    Reply = gen_server:call(FromNeighborPid,{receiveMsg,To,Msg}),
+    Reply = gen_server:call(FromNeighborPid,{receiveMsg,To,Msg,MoveSimFrom}),
     {reply, Reply, State}
   catch
     true-> {reply, notSent, State}
@@ -200,6 +200,9 @@ handle_cast({removeRobin,Pid}, State = #computerStateM_state{}) ->
   removeRobin(Pid,X,Y, State),
   {noreply, State};
 
+handle_cast({msgSent,From,To}, State = #computerStateM_state{}) ->
+  gen_server:cast({global, State#computerStateM_state.mainServer},{addMessage, {From,To}}),
+{noreply, State};
 
 
 %Robin crashed so we generate a new one

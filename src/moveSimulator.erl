@@ -146,7 +146,7 @@ updatedXYlocations(State)->
   %boarders check:
   if ((X < 0) or (X > 2000) or (Y < 0) or (Y > 2000)) ->
             gen_server:cast(self(),{changeDir}),
-    {X0,Y0,CurrTime};
+    {X0,Y0,CurrTime,false};
     true ->  %if X or Y are out of bounds, need to check if theres a new border or if a terminate is necessary
             if ((X>EndX+?DemilitarizedZone) or (X<StartX-?DemilitarizedZone) or (Y>EndY+?DemilitarizedZone) or (Y<StartY-?DemilitarizedZone)) ->
               try %wait for the computerServer to bring back an answer about the borders
@@ -157,13 +157,13 @@ updatedXYlocations(State)->
       %%          gen_server:stop(State#moveSimulator_state.myBatman,normal,1000),%Moving to another computer, Shut down Batman Server
       %%        gen_server:stop(self(), {normal,round(X),round(Y)},infinity);%Shut down MoveSimulator Server
                   true -> gen_server:cast(self(),{updateBorders,NewStartX,NewEndX,NewStartY,NewEndY})
-                end
+                end,       {X,Y,CurrTime,true}
+
               catch _-> innerConnectionError
               end;
-              true -> ok
-            end,
+              true -> {X,Y,CurrTime,false}
+            end
 
-      {X,Y,CurrTime}
   end.
 
 %%---------------------------------------------------------------------------------------------------
@@ -181,8 +181,9 @@ updatedXYlocations(State)->
   {stop, Reason :: term(), Reply :: term(), NewState :: #moveSimulator_state{}} |
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
 
-handle_call({receiveMsg,To,Msg}, From, State = #moveSimulator_state{}) ->
+handle_call({receiveMsg,To,Msg,MoveSimFrom}, From, State = #moveSimulator_state{}) ->
   castPlease({receiveMsg,from,From}),
+  gen_server:cast(State#moveSimulator_state.pcPid,{msgSent, {MoveSimFrom, {self(),node()}}}),
   if (To == {self(),node()}) -> castPlease(Msg); % case the msg is for me -> cast it
     true-> gen_server:cast(self(),{sendMsg,To, {From,node()},Msg}) % case the msg is not for me -> pass it on
   end,
@@ -217,7 +218,7 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
                                     %1.delete the neighbor 2.send the msg again to the next best link
                                         gen_server:cast(MyBatman, {deleteNeighbor, {BestLinkPid,BestLinkNode},To,Msg});
         (Node == BestLinkNode) -> % if the node is in my pc send it to him directly
-          Reply = gen_server:call(BestLinkPid,{receiveMsg,To,Msg}),
+          Reply = gen_server:call(BestLinkPid,{receiveMsg,To,Msg,{self(),node()}}),
           if
             (Reply == sent) -> {noreply, State#moveSimulator_state{}};
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
@@ -226,7 +227,7 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
           end;
         true -> % if the neighbor is on other computer and not the one that sent me the msg
           PcPid = State#moveSimulator_state.pcPid,
-          Reply = gen_server:call(PcPid,{sendMsg,To,BestLinkPid,Msg}),
+          Reply = gen_server:call(PcPid,{sendMsg,To,BestLinkPid,Msg,{self(),node()}}),
           if
             (Reply == sent) -> {noreply, State#moveSimulator_state{}};
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
@@ -263,8 +264,10 @@ handle_cast({changeDir}, State = #moveSimulator_state{}) ->
 
 %updateEts updates the location of my PID in the etsX and etsY
 handle_cast({updateEts}, State = #moveSimulator_state{}) ->
-  {X,Y,CurrTime} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
-    RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
+  {X,Y,CurrTime,ToTerminate} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
+   if  ToTerminate -> {stop, normal, State};
+     true ->
+     RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
     RoundedOldY = round(State#moveSimulator_state.myY),
 
     Tempx = ets:lookup(etsX,RoundedOldX),
@@ -292,7 +295,8 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
     [{_,NewListY}] = listToUpdate(ets:lookup(etsY,RoundedNewY),RoundedNewY),
     ets:insert(etsX,[{RoundedNewX,NewListX}]), %insert the new Locations lists
     ets:insert(etsY,[{RoundedNewY,NewListY}]),
-    {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}};
+    {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}
+   end;
 
 %%============sendToNeighbors=============================
 %% sends OGM to radius pids
@@ -335,7 +339,6 @@ handle_info(_Info, State = #moveSimulator_state{}) ->
     State :: #moveSimulator_state{}) -> term()).
 
 terminate(_Reason, _State = #moveSimulator_state{}) ->
-  castPlease({pid,self(),terminating}),
   ok.
 
 %% @private

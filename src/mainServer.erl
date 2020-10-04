@@ -24,6 +24,7 @@
 
 -define(SERVER, ?MODULE).
 -define(UpdateTime, 1000). % time for sending the ETSES tables
+-define(LineFrames, 40). %number of frames to show the line
 
 -record(mainServer_state, {}).
 
@@ -54,6 +55,7 @@ start_link(ComputerNodes,ComputersArea) ->
 init([{ComputerNodes,ComputersArea}]) ->
   % etsRobins: {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
   ets:new(etsRobins,[set,public,named_table]),
+  ets:new(etsMsgs,[set,public,named_table]),
 %%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers todo
 %%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area todo
   spawnComputer(ComputerNodes,ComputersArea,loop),
@@ -121,9 +123,15 @@ handle_cast({etsUpdate,From,EtsX,EtsY}, State = #mainServer_state{}) ->
 
 %Removes a Robin from the ETSRobins
 handle_cast({removeRobin,Pid,Node}, State = #mainServer_state{}) ->
-  gen_server:cast({global, tal@ubuntu},{test,{removingPid,Pid,etsRobins,ets:tab2list(etsRobins)}}),
   ets:delete(etsRobins, {Pid, Node}),
-gen_server:cast({global, tal@ubuntu},{test,{removedPid,Pid,etsRobins,ets:tab2list(etsRobins)}}),
+%%gen_server:cast({global, tal@ubuntu},{test,{removedPid,Pid,etsRobins,ets:tab2list(etsRobins),deleted,Bool}}),
+  {noreply, State};
+
+%Add a new message to etsMsgs
+handle_cast({addMessage,From,To}, State = #mainServer_state{}) ->
+gen_server:cast({global, tal@ubuntu},{test,{etsMsgs,ets:tab2list(etsMsgs)}}),
+
+  ets:insert(etsMsgs, {{From,To}, ?LineFrames}),
   {noreply, State};
 
 

@@ -173,7 +173,28 @@ do_refresh(C,NodesList)->
   wxDC:drawLine(DC,{0,500},{1000,500}),
   wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),
   [ paintCirclesinColors(DC,NodesList,Node,X,Y) || {{_Pid,Node},{X,Y}}<- EtsList],
+  wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),
+  [wxDC:drawLine(DC,XYFrom,XYTo)||{XYFrom,XYTo}<-getMsgPids()],
   wxPaintDC:destroy(DC).
+
+getMsgPids() ->getMsgPids([],ets:first(etsMsgs)).
+getMsgPids(L,'$end_of_table') ->L;%end  return List Of XYFrom, XYTo
+%For each msg in etsMsgs, take the timer down by one and if its 0 delete the msg
+%XYRobins is a list of {XYFrom location, XYTo location}
+getMsgPids(XYRobinsLocations,{From,To}) ->
+  [{_FromTo, Timer}] = ets:lookup(etsMsgs,{From,To}),
+  ets:delete(etsMsgs,{From,To}),
+  try
+  if Timer == 0 ->  getMsgPids(XYRobinsLocations,ets:next(etsMsgs,{From,To}));
+    true ->
+      [{_Robin, XYFrom}] = ets:lookup(etsRobins,From),
+      [{_Robin, XYTo}] = ets:lookup(etsRobins,To),
+      ets:insert(etsMsgs,{{From,To},Timer-1}),
+      getMsgPids(XYRobinsLocations++[{XYFrom,XYTo}],ets:next(etsMsgs,{From,To}))
+      end
+  catch
+    _->getMsgPids(XYRobinsLocations,ets:next(etsMsgs,{From,To}))
+  end.
 
 paintCirclesinColors(DC,NodesList,Node,X,Y) ->%Set a different color for each node.
   wxDC:setPen(DC, wxPen:new(getColor(Node,NodesList), [{width, 2}])) ,wxDC:drawCircle(DC, {X div 2,Y div 2}, 3).
