@@ -22,7 +22,7 @@
 -define(updateEts ,20). %how many time per second to update the ETS's
 -define(velMax , 100). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
--define(radius ,500).
+-define(radius ,300).
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 
 -record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction,myBatman,pcPid}).
@@ -182,8 +182,8 @@ updatedXYlocations(State)->
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
 
 handle_call({receiveMsg,To,Msg,MoveSimFrom}, From, State = #moveSimulator_state{}) ->
-  castPlease({receiveMsg,from,From}),
-  gen_server:cast(State#moveSimulator_state.pcPid,{msgSent, {MoveSimFrom, {self(),node()}}}),
+%%  castPlease({receiveMsg,from,From}),
+  gen_server:cast(State#moveSimulator_state.pcPid,{msgSent, MoveSimFrom, {self(),node()}}),
   if (To == {self(),node()}) -> castPlease(Msg); % case the msg is for me -> cast it
     true-> gen_server:cast(self(),{sendMsg,To, {From,node()},Msg}) % case the msg is not for me -> pass it on
   end,
@@ -206,7 +206,7 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 %%============================================================================================
 %% send MSG to someone using the BATMAN Protocol
 handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
-  castPlease({cast, sendMsg,self(), received,To,Msg}),
+%%  castPlease({cast, sendMsg,self(), received,To,Msg}),
   MyBatman = State#moveSimulator_state.myBatman,
   BestLink  = gen_server:call(MyBatman, {findBestLink, To}),
   if is_tuple(BestLink) -> % there where no problems, Best Link was found

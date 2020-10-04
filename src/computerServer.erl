@@ -19,7 +19,7 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 20). % number of processes in all the program "Robins"
+-define(N, 80). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 0). % how much area to add to each computer, "Demilitarized zone".
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
@@ -37,15 +37,12 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 start_link([ComputerNodes,ComputersArea,MainServerNode]) ->
 
   {ok, Pid} =  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea,MainServerNode],[]),
-  castPlease({ok0}),
 %% gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea,MainServerNode],[]),
   Mymonitor = spawn_link(fun()->monitorRobins(Pid) end ),%spawns a process to monitor all the move simulators.
 receive after 500-> ok end,
 
-  castPlease({ok1}),
   gen_server:call(Pid,{updateMyMonitor,Mymonitor}),
   monitorAllRobins(Mymonitor),
-  castPlease({ok2}),
 
     spawn_link(fun()->testMsgSending() end),
   spawn_link(fun()->updateMainServerEts(MainServerNode) end).
@@ -196,12 +193,13 @@ handle_cast({monitorMe,From}, State = #computerStateM_state{}) ->
 %removes Robin from ETS and cast mainServer to do so(Same as above but without X,Y
 handle_cast({removeRobin,Pid}, State = #computerStateM_state{}) ->
   {X,Y} = searchXYbyPid(Pid),
-  castPlease({removing,pid,Pid,xy,X,Y,ets:tab2list(etsX),ets:tab2list(etsY)}),
+%%  castPlease({removing,pid,Pid,xy,X,Y,ets:tab2list(etsX),ets:tab2list(etsY)}),
   removeRobin(Pid,X,Y, State),
   {noreply, State};
 
 handle_cast({msgSent,From,To}, State = #computerStateM_state{}) ->
-  gen_server:cast({global, State#computerStateM_state.mainServer},{addMessage, {From,To}}),
+  castPlease({sending,from,From,to,To}),
+  gen_server:cast({global, State#computerStateM_state.mainServer},{addMessage, From,To}),
 {noreply, State};
 
 
@@ -279,7 +277,7 @@ removeRobin(Pid,X,Y, State = #computerStateM_state{}) ->
   if length(ListY)>0 ->ets:insert(etsY,[{Y,ListY}]);
     true->  ets:delete(etsY,Y)
   end,
-  castPlease({removeingRobin,Pid}),
+%%  castPlease({removeingRobin,Pid}),
   %cast to main server to remove the pid from the main etsRobins
   MainServerNode = State#computerStateM_state.mainServer,
   gen_server:cast({global, MainServerNode},{removeRobin,Pid,node()}). % todo change
@@ -289,11 +287,11 @@ removeRobin(Pid,X,Y, State = #computerStateM_state{}) ->
 monitorRobins(MyComputerServer) ->
   receive
     {addRobin, Pid} ->
-      castPlease({monitoring,Pid}),
+%%      castPlease({monitoring,Pid}),
       erlang:monitor(process,Pid);
 
     {'DOWN', Ref, process, Pid, normal} ->
-      castPlease({normal,ref,Ref,pid,Pid}),
+%%      castPlease({normal,ref,Ref,pid,Pid}),
       gen_server:cast(MyComputerServer,{removeRobin, Pid});
 
     {'DOWN', Ref, process, Pid,  Reason} ->
@@ -301,7 +299,7 @@ monitorRobins(MyComputerServer) ->
       gen_server:cast(MyComputerServer,{removeRobin, Pid}),
       gen_server:cast(MyComputerServer,{generateRobin});
 
-    Msg ->   castPlease({zeze,Msg})
+    SomeError ->   castPlease({zeze,SomeError})
   end,
 monitorRobins(MyComputerServer).
 
@@ -336,7 +334,7 @@ testMsgSending()-> receive
                    after 5000  -> First = ets:first(etsX),
     From = takeNelement(First,rand:uniform(?N div 8)),
     To = takeNelement(First,rand:uniform(?N div 8)),
-    castPlease({sendingMsg,from,From,to,To}),
+%%    castPlease({sendingMsg,from,From,to,To}),
     gen_server:cast(From,{sendMsg,{To,node()},{first,msg},helloBanana})
                    end, testMsgSending().
 

@@ -1,4 +1,4 @@
-%%%-------------------------------------------------------------------
+%%-------------------------------------------------------------------
 %%% @author kapelnik
 %%% @copyright (C) 2020, <COMPANY>
 %%% @doc
@@ -183,17 +183,27 @@ getMsgPids(L,'$end_of_table') ->L;%end  return List Of XYFrom, XYTo
 %XYRobins is a list of {XYFrom location, XYTo location}
 getMsgPids(XYRobinsLocations,{From,To}) ->
   [{_FromTo, Timer}] = ets:lookup(etsMsgs,{From,To}),
-  ets:delete(etsMsgs,{From,To}),
+  Key = {From,To},
+  Next = ets:next(etsMsgs,Key),
   try
-  if Timer == 0 ->  getMsgPids(XYRobinsLocations,ets:next(etsMsgs,{From,To}));
+  if Timer == 0 ->
+    ets:delete(etsMsgs,Key),
+    getMsgPids(XYRobinsLocations,Next);
     true ->
-      [{_Robin, XYFrom}] = ets:lookup(etsRobins,From),
-      [{_Robin, XYTo}] = ets:lookup(etsRobins,To),
-      ets:insert(etsMsgs,{{From,To},Timer-1}),
-      getMsgPids(XYRobinsLocations++[{XYFrom,XYTo}],ets:next(etsMsgs,{From,To}))
+      [{{_Pid,_Node}, {XFrom,YFrom}}] = ets:lookup(etsRobins,From),
+      [{{_Pid2,_Node2}, {XTo,YTo}}] = ets:lookup(etsRobins,To),
+%%      ets:insert(etsMsgs,{{From,To},Timer-1}),
+        ets:delete(etsMsgs,Key),
+        ets:insert(etsMsgs,{Key,(Timer-1)}),
+%%      Bool = ets:update_element(etsMsgs,Key, {1,(Timer - 1)}),
+      computerServer:castPlease({koresing1,etsMsgs,ets:tab2list(etsMsgs),next,Next}),
+
+      getMsgPids(XYRobinsLocations++[{{XFrom div 2,YFrom div 2},{XTo div 2,YTo div 2}}],Next)
       end
   catch
-    _->getMsgPids(XYRobinsLocations,ets:next(etsMsgs,{From,To}))
+    _:_->
+      ets:delete(etsMsgs,Key),
+      getMsgPids(XYRobinsLocations,Next)
   end.
 
 paintCirclesinColors(DC,NodesList,Node,X,Y) ->%Set a different color for each node.

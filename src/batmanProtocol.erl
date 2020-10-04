@@ -286,12 +286,12 @@ getBestLink([{FromAddress,SeqList,_LastTTL,_LastValidTime}|ListOfNeighbors],Best
 %returns the best link to "To", if it doesn't exists it return an atom: "iDontKnowHim"
 findBestLink(To, State) ->
   Known = State#batmanProtocol_state.known,
-  try {_CurrentSeqNumber, BestLink, _LastAwareTime, _ListOfNeighbors} = maps:get(To,Known),
-      BestLink
+  try maps:get(To,Known) of
+    {_CurrentSeqNumber, BestLink, _LastAwareTime, _ListOfNeighbors} ->BestLink
   catch
-    {badkey,_key} -> iDontKnowHim;
-    {badmap,_map} -> badmap;
-    _ -> errorInfindBestLink
+    _:{badkey,_key} -> iDontKnowHim;
+    _:{badmap,_map} -> badmap;
+    _:_ -> errorInfindBestLink
   end.
 
 % (list of neighbors ->    {Pid@Node,sorted-list of in window seq numbers, last TTL, last Valid Time})

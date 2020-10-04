@@ -24,7 +24,7 @@
 
 -define(SERVER, ?MODULE).
 -define(UpdateTime, 1000). % time for sending the ETSES tables
--define(LineFrames, 40). %number of frames to show the line
+-define(LineFrames, 80). %number of frames to show the line
 
 -record(mainServer_state, {}).
 
@@ -55,7 +55,8 @@ start_link(ComputerNodes,ComputersArea) ->
 init([{ComputerNodes,ComputersArea}]) ->
   % etsRobins: {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
   ets:new(etsRobins,[set,public,named_table]),
-  ets:new(etsMsgs,[set,public,named_table]),
+  ets:new(etsMsgs,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
+
 %%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers todo
 %%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area todo
   spawnComputer(ComputerNodes,ComputersArea,loop),
@@ -129,8 +130,7 @@ handle_cast({removeRobin,Pid,Node}, State = #mainServer_state{}) ->
 
 %Add a new message to etsMsgs
 handle_cast({addMessage,From,To}, State = #mainServer_state{}) ->
-gen_server:cast({global, tal@ubuntu},{test,{etsMsgs,ets:tab2list(etsMsgs)}}),
-
+gen_server:cast({global, tal@ubuntu},{test,{addingLine,from,From,to,To,etsLookupFrom,ets:lookup(etsRobins,From),etsLookupTo,ets:lookup(etsRobins,To)}}),
   ets:insert(etsMsgs, {{From,To}, ?LineFrames}),
   {noreply, State};
 
