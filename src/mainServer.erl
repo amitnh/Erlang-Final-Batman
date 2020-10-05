@@ -60,7 +60,25 @@ init([{ComputerNodes,ComputersArea}]) ->
 %%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers todo
 %%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area todo
   spawnComputer(ComputerNodes,ComputersArea,loop),
+  spawn_link(fun()->testMsgSending() end),
+
   {ok, #mainServer_state{}}.
+testMsgSending()-> receive
+                   after 4000  -> First = ets:first(etsRobins),
+    {PidFrom,NodeFrom} = takeNelement(First,First,rand:uniform(20)),
+    {PidTo,NodeTo} = takeNelement(First,First,rand:uniform(20)),
+    if NodeFrom == NodeTo -> testMsgSending();
+      true->
+              computerServer:castPlease({mainServersendingMsg,from,{PidFrom,NodeFrom},to,{PidTo,NodeTo}}),
+              spawn(NodeFrom,gen_server,cast,[PidFrom,{sendMsg,{PidTo,NodeTo},{PidFrom,NodeFrom},helloBanana}])
+        , testMsgSending()
+    end
+    end.
+
+takeNelement('$end_of_table',Xlast, _) -> Xlast;
+takeNelement(X,_Xlast, 0) -> X;
+takeNelement(X,_Xlast, N) ->
+  takeNelement(ets:next(etsRobins,X),X, N-1).
 
 %a process updateMainServer sends every UpdateTime mili secs the ETS tables to the main server
 

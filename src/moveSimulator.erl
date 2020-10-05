@@ -22,8 +22,7 @@
 -define(updateEts ,20). %how many time per second to update the ETS's
 -define(velMax , 100). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
--define(radius ,300).
--define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
+-define(radius ,4000).
 
 -record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction,myBatman,pcPid}).
 
@@ -139,6 +138,7 @@ updatedXYlocations(State)->
   StartY = State#moveSimulator_state.startY,
   EndX = State#moveSimulator_state.endX,
   EndY = State#moveSimulator_state.endY,
+  DemilitarizedZone = State#moveSimulator_state.demiZone,
 
   X = X0 + math:cos(Dir * math:pi() / 180)*Vel*DeltaTime/1000, % x = vt , trigo
   Y = Y0 + math:sin(Dir * math:pi() / 180)*Vel*DeltaTime/1000,
@@ -148,7 +148,7 @@ updatedXYlocations(State)->
             gen_server:cast(self(),{changeDir}),
     {X0,Y0,CurrTime,false};
     true ->  %if X or Y are out of bounds, need to check if theres a new border or if a terminate is necessary
-            if ((X>EndX+?DemilitarizedZone) or (X<StartX-?DemilitarizedZone) or (Y>EndY+?DemilitarizedZone) or (Y<StartY-?DemilitarizedZone)) ->
+            if ((X>EndX+DemilitarizedZone) or (X<StartX-DemilitarizedZone) or (Y>EndY+DemilitarizedZone) or (Y<StartY-DemilitarizedZone)) ->
               try %wait for the computerServer to bring back an answer about the borders
                 {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,{updateBorders,{round(X),round(Y),State#moveSimulator_state.direction,State#moveSimulator_state.velocity}}),
                 if ToTerminate ->
@@ -182,7 +182,7 @@ updatedXYlocations(State)->
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
 
 handle_call({receiveMsg,To,Msg,MoveSimFrom}, From, State = #moveSimulator_state{}) ->
-%%  castPlease({receiveMsg,from,From}),
+  castPlease({receiveMsg,from,From}),
   gen_server:cast(State#moveSimulator_state.pcPid,{msgSent, MoveSimFrom, {self(),node()}}),
   if (To == {self(),node()}) -> castPlease(Msg); % case the msg is for me -> cast it
     true-> gen_server:cast(self(),{sendMsg,To, {From,node()},Msg}) % case the msg is not for me -> pass it on
@@ -206,9 +206,10 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 %%============================================================================================
 %% send MSG to someone using the BATMAN Protocol
 handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
-%%  castPlease({cast, sendMsg,self(), received,To,Msg}),
+  castPlease({firstSendMsgMoveSimulator,to,To,from,From,msg,Msg}),
   MyBatman = State#moveSimulator_state.myBatman,
   BestLink  = gen_server:call(MyBatman, {findBestLink, To}),
+  castPlease({bestLink,BestLink,state,State}),
   if is_tuple(BestLink) -> % there where no problems, Best Link was found
     {BestLinkPid,BestLinkNode}= BestLink,
     Node = node(),

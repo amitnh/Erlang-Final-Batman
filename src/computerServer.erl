@@ -44,7 +44,6 @@ receive after 500-> ok end,
   gen_server:call(Pid,{updateMyMonitor,Mymonitor}),
   monitorAllRobins(Mymonitor),
 
-    spawn_link(fun()->testMsgSending() end),
   spawn_link(fun()->updateMainServerEts(MainServerNode) end).
 
 %%%===================================================================
@@ -90,6 +89,7 @@ handle_call(sendLocations, _From, State = #computerStateM_state{}) ->
   {reply, {ets:tab2list(etsX),ets:tab2list(etsY)}, State};
 %%===================================================================================
 %sendMsg = the Msg needs to be sent to neighbor computerServer
+
 handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg,MoveSimFrom}, _From, State = #computerStateM_state{}) ->
   try %if the call fails
     Reply = gen_server:call({global, FromNeighborNode},{receiveMsg,To, {FromNeighborPid,FromNeighborNode},Msg,MoveSimFrom}),
@@ -146,16 +146,18 @@ handle_cast({createBatman,{X,Y,Dir,Vel}}, State = #computerStateM_state{})->
 handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{Pid,Node}}, State = #computerStateM_state{}) -> %todo todo only temp
   {StartX,EndX,_,_}= State#computerStateM_state.myArea,
   DisToLeft = MyX - StartX,
-  DisToRight = EndX - MyY,
+  DisToRight = EndX - MyX,
   if DisToRight < DisToLeft ->% im close to the right border
     if EndX < 2000 -> % there is a computer to te right
       [Node] = neighbor(State,right),
-      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
+      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}});
+      true->{noreply, State}
     end;
   true -> % else DisToRight >= DisToLeft
     if StartX > 0 -> % there is a computer to the left
       [Node] = neighbor(State,left),
-      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
+      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}});
+      true->{noreply, State}
     end
   end,
   {noreply, State};
@@ -166,12 +168,14 @@ handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{Pid,Node}}, State = #computerState
   if DisToDown < DisToUp ->% im close to the right border
     if EndY < 2000 -> % there is a computer to te right
       [Node] = neighbor(State,down),
-      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
+      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}});
+    true->{noreply, State}
     end;
     true -> % else DisToRight >= DisToLeft
       if StartY > 0 -> % there is a computer to the left
         [Node] = neighbor(State,up),
-        gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}})
+        gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}});
+        true->{noreply, State}
       end
   end,
   {noreply, State};
@@ -259,7 +263,7 @@ neighbor(State,Dir) ->
 %getComputer returns the target computer Node to transfer the movesimulator process to,
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputersArea-> [{startX,endX,startY,endY},...] size 4
-% getComputer(X,Y,State#computerStateM_state.computersArea,State#computerStateM_state.computerNodes),
+% getComputer(X,Y,computersArea,computerNodes),
 
 getComputer(_,_,[],[])-> nodeNotFound;
 getComputer(X,Y,[{StartX,EndX,StartY,EndY}|_],[Node|_]) when ((StartX<X) and (X<EndX) and (StartY<Y) and (Y<EndY)) ->Node;
@@ -330,19 +334,4 @@ updateMainServerEts(MainServerNode)-> receive
                                       after 1000 div ?updateMainEts -> gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})
                                       end, updateMainServerEts(MainServerNode).
 
-testMsgSending()-> receive
-                   after 5000  -> First = ets:first(etsX),
-    From = takeNelement(First,rand:uniform(?N div 8)),
-    To = takeNelement(First,rand:uniform(?N div 8)),
-%%    castPlease({sendingMsg,from,From,to,To}),
-    gen_server:cast(From,{sendMsg,{To,node()},{first,msg},helloBanana})
-                   end, testMsgSending().
 
-takeNelement(X, 0) ->
-  try
-    [{_Key,[Pid|_]}]=ets:lookup(etsX,X), Pid
-  catch
-    _-> castPlease({errorintakeNelement,x,X}), ets:first(etsX)
-  end;
-takeNelement(X, N) ->
-  takeNelement(ets:next(etsX,X), N-1).
