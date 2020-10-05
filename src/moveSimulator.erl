@@ -209,7 +209,7 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
   castPlease({firstSendMsgMoveSimulator,to,To,from,From,msg,Msg}),
   MyBatman = State#moveSimulator_state.myBatman,
   BestLink  = gen_server:call(MyBatman, {findBestLink, To}),
-  castPlease({bestLink,BestLink,state,State}),
+  castPlease({bestLink,BestLink}),
   if is_tuple(BestLink) -> % there where no problems, Best Link was found
     {BestLinkPid,BestLinkNode}= BestLink,
     Node = node(),
@@ -348,17 +348,23 @@ terminate(_Reason, State = #moveSimulator_state{}) ->
   X = round(State#moveSimulator_state.myX),
   Y = round(State#moveSimulator_state.myY),
   Pid = self(),
-  [ {_,TempX}] = ets:lookup(etsX,X),
-  [{_, TempY}]= ets:lookup(etsY,Y),
-  ListX = TempX -- [Pid],% remove the pid from the old location
-  ListY = TempY -- [Pid],
-  if length(ListX)>0 ->ets:insert(etsX,[{X,ListX}]);
-    true->  ets:delete(etsX,X)
-  end,
-  if length(ListY)>0 ->ets:insert(etsY,[{Y,ListY}]);
-    true->  ets:delete(etsY,Y)
-  end,
-  ok.
+  ObjectX = ets:lookup(etsX,X),
+  ObjectY= ets:lookup(etsY,Y),%
+
+  if (ObjectX == []) -> ok;
+  true->
+      [{_, TempX}] = ObjectX,
+      [{_, TempY}] = ObjectY,
+      ListX = TempX -- [Pid],% remove the pid from the old location
+      ListY = TempY -- [Pid],
+      if (length(ListX)>0 )->ets:insert(etsX,[{X,ListX}]);
+        true->  ets:delete(etsX,X)
+      end,
+      if (length(ListY)>0) ->ets:insert(etsY,[{Y,ListY}]);
+        true->  ets:delete(etsY,Y)
+      end
+    end,
+    ok.
 
 %% @private
 %% @doc Convert process state when code is changed

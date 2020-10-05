@@ -118,7 +118,7 @@ handle_call({updateBorders, {X,Y,Dir,Vel}}, _From, State = #computerStateM_state
 
   if ((Y<StartY) or (Y > EndY) or (X < StartX) or (X > EndX)) ->%check if the movesim borders needs to be updated
       CompTrgt = getComputer(X,Y,State#computerStateM_state.computersArea,State#computerStateM_state.computerNodes),
-    castPlease({computerTarger,CompTrgt,mynode,node()}),
+%%    castPlease({computerTarger,CompTrgt,mynode,node()}),
       ToTerminate = true,
       try
         gen_server:cast({global,CompTrgt},{createBatman,{round(X),round(Y),Dir,Vel}})
@@ -190,7 +190,7 @@ handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #compu
 handle_cast({ogmFromNeighbor,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #computerStateM_state{}) ->
 %%  send the OGM to all the Robins in the radius in my computer
   ListOfRobins = moveSimulator:robinsInRadiusForRemote(MyX,MyY),
-  castPlease({ogmFromNeigh,mynode,node(),pidnode, {PidFrom, NodeFrom},OGM,listOFROBINS,ListOfRobins}),
+%%  castPlease({ogmFromNeigh,mynode,node(),pidnode, {PidFrom, NodeFrom},OGM,listOFROBINS,ListOfRobins}),
   [gen_server:cast(PidTo,{ogm,OGM,{PidFrom,NodeFrom}}) ||{PidTo,_NodeTo} <- ListOfRobins],
 %%  [castPlease({PidTo1, {ogm, OGM, {PidFrom, NodeFrom}},mynode,node()}) ||{PidTo1,_NodeTo1} <- ListOfRobins],
   {noreply, State};

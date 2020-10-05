@@ -254,8 +254,8 @@ updateCurrSeqNum({_CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}, 
   {SeqNum, getBestLink(ListOfNeighbors,BestLink,0), erlang:system_time(millisecond), NewListOfNeighbors}.
 
 %returns lists of neighbors in the new in-window
-updateInWindow(ListOfNeighbors, CurrSeqNum) ->NewLists = [{FromAddress,lists:filter(fun(SeqNum) -> SeqNum > CurrSeqNum- ?windowSize end, SeqList), LastTTL, LastValidTime}||{FromAddress,SeqList, LastTTL, LastValidTime}<-ListOfNeighbors],
-  [{FromAddress,SeqList, LastTTL, LastValidTime}||{FromAddress,SeqList, LastTTL, LastValidTime}<-NewLists,length(SeqList)>0]. % removes the empty neighbors
+updateInWindow(ListOfNeighbors, CurrSeqNum) ->NewLists = [{FromAddress,lists:filter(fun(SeqNum) -> (SeqNum > (CurrSeqNum- ?windowSize)) end, SeqList), LastTTL, LastValidTime}||{FromAddress,SeqList, LastTTL, LastValidTime}<-ListOfNeighbors],
+  [{FromAddress,SeqList, LastTTL, LastValidTime}||{FromAddress,SeqList, LastTTL, LastValidTime}<-NewLists,(length(SeqList)>0)]. % removes the empty neighbors
 
 
 
