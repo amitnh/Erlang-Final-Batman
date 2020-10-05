@@ -83,6 +83,7 @@ init([PidMoveSimulator]) ->
 
 handle_call({findBestLink, To}, _From, State = #batmanProtocol_state{}) ->
   BestLink = findBestLink(To,State), %finds the best link and returns it
+%%  castPlease({batmanNode,node(),myknown, State#batmanProtocol_state.known}),
   {reply, BestLink, State};
 
 handle_call(_Request, _From, State = #batmanProtocol_state{}) ->
@@ -113,10 +114,11 @@ handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},OriginatorAddress}, State = #ba
   Pid=State#batmanProtocol_state.pid,
   if ((OriginatorAddress =/= {Pid,node()}) and (TTL-1 > 0)) -> %% check if im not the Originator. and if TTL>0
     OGM = {SeqNum, TTL-1 ,OriginatorAddress}, % Time to live -1
-    gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM})
-    end,
+    gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM}),
+    {noreply, NewState};
+  true -> {noreply, NewState}
+    end;
 
-  {noreply, NewState};
 %%===============OGM recieved not from direct neighbor=================================
 handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},FromAddress}, State = #batmanProtocol_state{}) ->
   %----------------------
@@ -149,7 +151,9 @@ gen_server:cast(State#batmanProtocol_state.pid,{sendMSG,To,Msg}),% send the MSG 
 
 
 
-handle_cast(_Request, State = #batmanProtocol_state{}) ->
+handle_cast(Request, State = #batmanProtocol_state{}) ->
+  castPlease({missedMessegBATMAN,request,Request}),
+
   {noreply, State}.
 
 %% @private

@@ -116,18 +116,21 @@ handle_call({receiveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg,MoveSimFrom}
 handle_call({updateBorders, {X,Y,Dir,Vel}}, _From, State = #computerStateM_state{}) ->
   {StartX,EndX,StartY,EndY} = State#computerStateM_state.myArea,
 
-  if ((Y<StartY) or (Y > EndY) or (X < StartX) or (X > EndX)) ->%check if the movesim have old borders
+  if ((Y<StartY) or (Y > EndY) or (X < StartX) or (X > EndX)) ->%check if the movesim borders needs to be updated
       CompTrgt = getComputer(X,Y,State#computerStateM_state.computersArea,State#computerStateM_state.computerNodes),
+    castPlease({computerTarger,CompTrgt,mynode,node()}),
       ToTerminate = true,
       try
         gen_server:cast({global,CompTrgt},{createBatman,{round(X),round(Y),Dir,Vel}})
-      catch _-> connectionError
+      catch _:Err->     castPlease({borderserror,Err})
+        ,connectionError
       end;
     true -> ToTerminate = false %New borders
   end,
   {reply, {StartX,EndX,StartY,EndY,ToTerminate}, State};
 
-handle_call(_Request, _From, State = #computerStateM_state{}) ->
+handle_call(Request, _From, State = #computerStateM_state{}) ->
+  castPlease({computerServerMissedCalls, Request}),
   {reply, ok, State}.
 
 %% @private
@@ -143,38 +146,40 @@ handle_cast({createBatman,{X,Y,Dir,Vel}}, State = #computerStateM_state{})->
   spawn(moveSimulator,start_link,[[State#computerStateM_state.myArea,?DemilitarizedZone,self(),{X,Y,Dir,Vel}]]),
 {noreply, State};
 
-handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{Pid,Node}}, State = #computerStateM_state{}) -> %todo todo only temp
+handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #computerStateM_state{}) -> %todo todo only temp
   {StartX,EndX,_,_}= State#computerStateM_state.myArea,
   DisToLeft = MyX - StartX,
   DisToRight = EndX - MyX,
-  if DisToRight < DisToLeft ->% im close to the right border
-    if EndX < 2000 -> % there is a computer to te right
+  if (DisToRight < DisToLeft) ->% im close to the right border
+    if (EndX < 2000) -> % there is a computer to te right
       [Node] = neighbor(State,right),
-      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}});
+      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{PidFrom,NodeFrom}});
       true->{noreply, State}
     end;
   true -> % else DisToRight >= DisToLeft
-    if StartX > 0 -> % there is a computer to the left
-      [Node] = neighbor(State,left),
-      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}});
+    if (StartX > 0) -> % there is a computer to the left
+      [Node2] = neighbor(State,left),
+      gen_server:cast({global, Node2},{ogmFromNeighbor,MyX,MyY,OGM,{PidFrom,NodeFrom}});
       true->{noreply, State}
     end
   end,
   {noreply, State};
-handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{Pid,Node}}, State = #computerStateM_state{}) -> %todo todo only temp
+handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #computerStateM_state{}) -> %todo todo only temp
   {_,_,StartY,EndY}= State#computerStateM_state.myArea,
   DisToUp = MyY - StartY,
   DisToDown = EndY - MyY,
-  if DisToDown < DisToUp ->% im close to the right border
-    if EndY < 2000 -> % there is a computer to te right
+  if (DisToDown < DisToUp) ->% im close to the right border
+    if (EndY < 2000) -> % there is a computer to down
       [Node] = neighbor(State,down),
-      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}});
+
+      gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{PidFrom,NodeFrom}});
     true->{noreply, State}
     end;
     true -> % else DisToRight >= DisToLeft
-      if StartY > 0 -> % there is a computer to the left
-        [Node] = neighbor(State,up),
-        gen_server:cast({global, Node},{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}});
+      if (StartY > 0) -> % there is a computer to the left
+        [Node2] = neighbor(State,up),
+
+        gen_server:cast({global, Node2},{ogmFromNeighbor,MyX,MyY,OGM,{PidFrom,NodeFrom}});
         true->{noreply, State}
       end
   end,
@@ -182,10 +187,12 @@ handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{Pid,Node}}, State = #computerState
 %%===================================================================================
 
 %%===================================================================================
-handle_cast({Node,{ogmFromNeighbor,MyX,MyY,OGM,{Pid,Node}}}, State = #computerStateM_state{}) ->
+handle_cast({ogmFromNeighbor,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #computerStateM_state{}) ->
 %%  send the OGM to all the Robins in the radius in my computer
   ListOfRobins = moveSimulator:robinsInRadiusForRemote(MyX,MyY),
-  [gen_server:cast(Pid,{ogm,OGM,{Pid,Node}}) ||{Pid,_Node} <- ListOfRobins],
+  castPlease({ogmFromNeigh,mynode,node(),pidnode, {PidFrom, NodeFrom},OGM,listOFROBINS,ListOfRobins}),
+  [gen_server:cast(PidTo,{ogm,OGM,{PidFrom,NodeFrom}}) ||{PidTo,_NodeTo} <- ListOfRobins],
+%%  [castPlease({PidTo1, {ogm, OGM, {PidFrom, NodeFrom}},mynode,node()}) ||{PidTo1,_NodeTo1} <- ListOfRobins],
   {noreply, State};
 
 %%===================================================================================
@@ -216,7 +223,9 @@ handle_cast({generateRobin}, State = #computerStateM_state{}) ->
 
 
 %%===================================================================================
-handle_cast(_Request, State = #computerStateM_state{}) ->
+handle_cast(Request, State = #computerStateM_state{}) ->
+  castPlease({missedMessegCOMPs,request,Request}),
+
   {noreply, State}.
 %%===================================================================================
 %% @private
@@ -253,11 +262,13 @@ code_change(_OldVsn, State = #computerStateM_state{}, _Extra) ->
 neighbor(State,Dir) ->
   ZipLists = lists:zip(State#computerStateM_state.computerNodes,State#computerStateM_state.computersArea),
   case Dir of
-    right -> [Node ||{Node,{_Sx,Ex,_Sy,_Ey}}<- ZipLists, Ex = 2000];
-    left -> [Node ||{Node,{Sx,_Ex,_Sy,_Ey}}<- ZipLists, Sx = 0];
-    up -> [Node ||{Node,{_Sx,_Ex,_Sy,Ey}}<- ZipLists, Ey = 2000];
-    true -> [Node ||{Node,{_Sx,_Ex,Sy,_Ey}}<- ZipLists, Sy = 0] % case down
-  end.
+    right -> [Node ||{Node,{_Sx,Ex,_Sy,_Ey}}<- ZipLists, Ex == 2000];
+    left -> [Node ||{Node,{Sx,_Ex,_Sy,_Ey}}<- ZipLists, Sx == 0];
+    up -> [Node ||{Node,{_Sx,_Ex,Sy,_Ey}}<- ZipLists, Sy == 0];
+    down -> [Node ||{Node,{_Sx,_Ex,_Sy,Ey}}<- ZipLists, Ey == 2000];
+  true->   castPlease({list,ZipLists,dir,Dir,node,error})
+
+end.
 
 
 %getComputer returns the target computer Node to transfer the movesimulator process to,
@@ -271,16 +282,16 @@ getComputer(X,Y,[_|Areas],[_Node|Nodes]) -> getComputer(X,Y,Areas,Nodes).
 
 %removes Robin from ETS and cast mainServer to do so
 removeRobin(Pid,X,Y, State = #computerStateM_state{}) ->
-  [ {_,TempX}] = ets:lookup(etsX,X),
-  [{_, TempY}]= ets:lookup(etsY,Y),
-  ListX = TempX -- [Pid],% remove the pid from the old location
-  ListY = TempY -- [Pid],
-  if length(ListX)>0 ->ets:insert(etsX,[{X,ListX}]);
-    true->  ets:delete(etsX,X)
-  end,
-  if length(ListY)>0 ->ets:insert(etsY,[{Y,ListY}]);
-    true->  ets:delete(etsY,Y)
-  end,
+%%  [ {_,TempX}] = ets:lookup(etsX,X),
+%%  [{_, TempY}]= ets:lookup(etsY,Y),
+%%  ListX = TempX -- [Pid],% remove the pid from the old location
+%%  ListY = TempY -- [Pid],
+%%  if length(ListX)>0 ->ets:insert(etsX,[{X,ListX}]);
+%%    true->  ets:delete(etsX,X)
+%%  end,
+%%  if length(ListY)>0 ->ets:insert(etsY,[{Y,ListY}]);
+%%    true->  ets:delete(etsY,Y)
+%%  end,
 %%  castPlease({removeingRobin,Pid}),
   %cast to main server to remove the pid from the main etsRobins
   MainServerNode = State#computerStateM_state.mainServer,

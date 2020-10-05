@@ -271,13 +271,15 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
      RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
     RoundedOldY = round(State#moveSimulator_state.myY),
 
-    Tempx = ets:lookup(etsX,RoundedOldX),
-    Tempy = ets:lookup(etsY,RoundedOldY),
+    [{_Keyx,Tempx}] = ets:lookup(etsX,RoundedOldX),
+    [{_Keyy,Tempy}] = ets:lookup(etsY,RoundedOldY),
 
-    if length(Tempx)>0 -> [{_,ListX}]= Tempx; %check if lookup is empty
+    if (length(Tempx)>0) ->
+          ListX= Tempx; %check if lookup is empty
         true-> ListX =[]
      end,
-    if length(Tempy)>0 -> [{_,ListY}]= Tempy;
+    if (length(Tempy)>0) ->
+      ListY= Tempy;
       true-> ListY =[]
     end,
 
@@ -312,13 +314,16 @@ handle_cast({sendToNeighbors,OGM}, State = #moveSimulator_state{}) -> % Msg usua
 %%send it to the Batman
 handle_cast({ogm,OGM,{Pid,Node}}, State = #moveSimulator_state{}) ->
   Batman =State#moveSimulator_state.myBatman,
+
   gen_server:cast(Batman,{ogm,OGM,{Pid,Node}}),
 {noreply, State};
 
 handle_cast({stopNormally}, State = #moveSimulator_state{}) ->
 {stop, normal, State};
 
-handle_cast(_Request, State = #moveSimulator_state{}) ->
+handle_cast(Request, State = #moveSimulator_state{}) ->
+  castPlease({missedMessegMOVESIM,request,Request}),
+
   {noreply, State}.
 
 
@@ -339,7 +344,20 @@ handle_info(_Info, State = #moveSimulator_state{}) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #moveSimulator_state{}) -> term()).
 
-terminate(_Reason, _State = #moveSimulator_state{}) ->
+terminate(_Reason, State = #moveSimulator_state{}) ->
+  X = round(State#moveSimulator_state.myX),
+  Y = round(State#moveSimulator_state.myY),
+  Pid = self(),
+  [ {_,TempX}] = ets:lookup(etsX,X),
+  [{_, TempY}]= ets:lookup(etsY,Y),
+  ListX = TempX -- [Pid],% remove the pid from the old location
+  ListY = TempY -- [Pid],
+  if length(ListX)>0 ->ets:insert(etsX,[{X,ListX}]);
+    true->  ets:delete(etsX,X)
+  end,
+  if length(ListY)>0 ->ets:insert(etsY,[{Y,ListY}]);
+    true->  ets:delete(etsY,Y)
+  end,
   ok.
 
 %% @private
@@ -366,17 +384,20 @@ robinsInRadius(State,OGM) ->
   StartX =  State#moveSimulator_state.startX,
   StartY =  State#moveSimulator_state.startY,
   DemiZone = State#moveSimulator_state.demiZone,
+  PCPid = State#moveSimulator_state.pcPid,
   %Xlist and Ylist are all the pids in square of radius x radius
-  Xlist = getPrev(etsX,MyX,MyX,[]) ++ getNext(etsX,MyX,MyX,[]),
-  Ylist = getPrev(etsY,MyY,MyY,[]) ++ getNext(etsY,MyY,MyY,[]),
+  Xlist = getLineInRadius(etsX,MyX),
+  Ylist = getLineInRadius(etsY,MyY),
+%%  Xlist = getPrev(etsX,MyX,MyX,[]) ++ getNext(etsX,MyX,MyX,[]),
+%%  Ylist = getPrev(etsY,MyY,MyY,[]) ++ getNext(etsY,MyY,MyY,[]),
 
   % case im close to the border, i will send a request to computerServer to look for neighbors in other computers
-  if (MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone) ->
-    gen_server:cast({global, tal@ubuntu},{sendOGMtoNeighborsX,MyX,MyY,OGM,{self(),node()}}); % tell the computer to send OGM to the nodes in other computer
+  if ((MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone)) ->
+    gen_server:cast(PCPid ,{sendOGMtoNeighborsX,MyX,MyY,OGM,{self(),node()}}); % tell the computer to send OGM to the nodes in other computer
   true->ok
     end,
-  if (MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) ->
-    gen_server:cast({global, tal@ubuntu},{sendOGMtoNeighborsY,MyX,MyY,OGM,{self(),node()}}); %
+  if ((MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) )->
+    gen_server:cast(PCPid,{sendOGMtoNeighborsY,MyX,MyY,OGM,{self(),node()}}); %
   true->ok
     end,
 
@@ -387,9 +408,9 @@ robinsInRadius(State,OGM) ->
 robinsInRadiusForRemote(X,Y) ->
 
   %Xlist and Ylist are all the pids in square of (radius x radius)
-  Xlist = getPrev(etsX,X,X,[]) ++ getNext(etsX,X,X,[]),
-  Ylist = getPrev(etsY,Y,Y,[]) ++ getNext(etsY,Y,Y,[]),
-  getPidsInCircle(Y,Y,Xlist,Ylist).
+  Xlist = getLineInRadius(etsX,X),
+  Ylist = getLineInRadius(etsY,Y),
+  getPidsInCircle(X,Y,Xlist,Ylist).
 %%===========================================================
 
 
@@ -423,22 +444,34 @@ getCircle(MyX,MyY,Square) -> R = ?radius,
 %%  lists:filter(fun({X,Y,_Address}) -> (((X*X)+(Y*Y))< (?radius*?radius)) end, Square).
 %%===========================================================
 
+%%getLineInRadius(ETSLIST,OriginX,ListofRobinsInLine) return all robins at radius-x<x<radius+x
+
+getLineInRadius(ETS,X) -> lists:flatten([[{RobinX,{Pid,node()}}||Pid<-Pids]|| {RobinX,Pids}<- ets:tab2list(ETS),((RobinX<X+?radius) or(RobinX>X-?radius)) ]).
+
+
+
 
 %%===========================================================
 %%% getNext and getPrev works on etsX or etsY
 %% they return a list of Location and pids, in the same computerServer in the radius range
 %%===========================================================
 getNext(_,_,'$end_of_table',List)-> List;
-getNext(_,MyX,NextX,List) when NextX - MyX > ?radius ->  List;  % case nextX not in range
+getNext(_,MyX,NextX,List) when ((NextX - MyX) > ?radius) ->  List;  % case nextX not in range
 getNext(Ets,MyX,NextX,List)  -> % case nextX in range
-  [{_Key,Pids}]= ets:lookup(Ets,NextX), % Value contains the list of Pids
+  Object= ets:lookup(Ets,NextX), % Value contains the list of Pids
+  if (Object == []) -> getNext(Ets,MyX,MyX,[]); % if there is an error start over
+    true -> [{_Key,Pids}] = Object,
     NewList = List ++ [{NextX,{Pid,node()}}||Pid<-Pids],
-    getNext(Ets,MyX,ets:next(Ets,NextX),NewList).
+    getNext(Ets,MyX,ets:next(Ets,NextX),NewList)
+end.
 
 getPrev(_,_,'$end_of_table',List)-> List;
-getPrev(_,MyX,PrevX,List) when MyX - PrevX > ?radius ->  List;  % case prevX not in range
+getPrev(_,MyX,PrevX,List) when ((MyX - PrevX) > ?radius) ->  List;  % case prevX not in range
 getPrev(Ets,MyX,PrevX,List)  -> % case prevX in range
-  [{_Key,Pids}]= ets:lookup(Ets,PrevX), % Value contains the list of Pids
+  Object = ets:lookup(Ets,PrevX), % Value contains the list of Pids
+  if (Object == []) -> getPrev(Ets,MyX,MyX,[]); % if there is an error start over
+    true -> [{_Key,Pids}] = Object,
   NewList =  [{PrevX,{Pid,node()}}||Pid<-Pids] ++ List,
-  getPrev(Ets,MyX,ets:prev(Ets,PrevX),NewList).
+  getPrev(Ets,MyX,ets:prev(Ets,PrevX),NewList)
+end.
 %%===========================================================
