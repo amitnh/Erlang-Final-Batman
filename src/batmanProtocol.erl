@@ -87,6 +87,8 @@ handle_call({findBestLink, To}, _From, State = #batmanProtocol_state{}) ->
   {reply, BestLink, State};
 
 handle_call(_Request, _From, State = #batmanProtocol_state{}) ->
+  castPlease({missedCallBatman, request, _Request, from, _From}),
+
   {reply, ok, State}.
 
 %% @private
@@ -246,6 +248,7 @@ getNeighbor(FromAddress, [{FromAddress,SeqList,LastTTL,LastValidTime}|_],_) ->{F
 getNeighbor(FromAddress, [_|ListOfNeighbors],TTL) -> getNeighbor(FromAddress, ListOfNeighbors,TTL).
 
 
+
 % return a new KnownBatman with everything updated (uses addSeqNum)
 updateCurrSeqNum({_CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}, FromAddress, SeqNum,NewTTL) ->
 
@@ -310,7 +313,7 @@ deleteNeighbor(ToDelete,AddressFrom,Known) ->
   {CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}= maps:get(AddressFrom,Known),
   NewList = deleteNeighborFronList(ListOfNeighbors,ToDelete), %deletes the Neighbor from list
   NewKnownBatman =  {CurrentSeqNumber, BestLink, LastAwareTime, NewList},% making new KnownBatman with the new list
-  maps:put(updateBestLink(NewKnownBatman,AddressFrom),Known). %updates the BestLink in KnownBatman and put it in known (a NewKnown is returned)
+  maps:put(AddressFrom,updateBestLink(NewKnownBatman,AddressFrom),Known). %updates the BestLink in KnownBatman and put it in known (a NewKnown is returned)
 deleteNeighborFronList(ListOfNeighbors, Neighbor) ->
   deleteNeighborFronList(ListOfNeighbors, Neighbor,[]).
 deleteNeighborFronList([{Neighbor,_,_,_}|ListOfNeighbors], Neighbor,NewList)-> NewList ++ ListOfNeighbors; %if i found the Neighbor put it out of the newList

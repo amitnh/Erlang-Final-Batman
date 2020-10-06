@@ -103,6 +103,8 @@ spawnComputer(ComputerNodes,ComputersArea,Node) ->
   {stop, Reason :: term(), Reply :: term(), NewState :: #mainServer_state{}} |
   {stop, Reason :: term(), NewState :: #mainServer_state{}}).
 handle_call(_Request, _From, State = #mainServer_state{}) ->
+  moveSimulator:castPlease({missedCallmainServer, request, _Request, from, _From}),
+
   {reply, ok, State}.
 
 
@@ -154,6 +156,8 @@ handle_cast({addMessage,From,To}, State = #mainServer_state{}) ->
 
 
 handle_cast(_Request, State = #mainServer_state{}) ->
+  moveSimulator:castPlease({missedCallMainSer, request, _Request}),
+
   {noreply, State}.
 
 %% @private

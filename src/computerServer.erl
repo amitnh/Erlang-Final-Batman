@@ -95,7 +95,7 @@ handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg,MoveSimFrom}, _F
     Reply = gen_server:call({global, FromNeighborNode},{receiveMsg,To, {FromNeighborPid,FromNeighborNode},Msg,MoveSimFrom}),
     {reply, Reply, State}
   catch
-    true-> {reply, notSent, State}
+    _:_-> {reply, notSent, State}
   end;
 
 handle_call({updateMyMonitor,Mymonitor}, _From, State = #computerStateM_state{}) ->
@@ -107,7 +107,7 @@ handle_call({receiveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg,MoveSimFrom}
     Reply = gen_server:call(FromNeighborPid,{receiveMsg,To,Msg,MoveSimFrom}),
     {reply, Reply, State}
   catch
-    true-> {reply, notSent, State}
+    _:_-> {reply, notSent, State}
   end;
 %%===================================================================================
 

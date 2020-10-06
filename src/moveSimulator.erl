@@ -159,7 +159,7 @@ updatedXYlocations(State)->
                   true -> gen_server:cast(self(),{updateBorders,NewStartX,NewEndX,NewStartY,NewEndY})
                 end,       {X,Y,CurrTime,true}
 
-              catch _-> innerConnectionError
+              catch _:_-> innerConnectionError
               end;
               true -> {X,Y,CurrTime,false}
             end
@@ -190,6 +190,7 @@ handle_call({receiveMsg,To,Msg,MoveSimFrom}, {FromPid,_Ref}, State = #moveSimula
   {reply, sent, State};
 
 handle_call(_Request, _From, State = #moveSimulator_state{}) ->
+  castPlease({missedCallMovSim, request, _Request, from, _From}),
   {reply, ok, State}.
 
 %% @private
@@ -205,6 +206,7 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 
 %%============================================================================================
 %% send MSG to someone using the BATMAN Protocol
+
 handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
   castPlease({firstSendMsgMoveSimulator,to,To,from,From,msg,Msg}),
   MyBatman = State#moveSimulator_state.myBatman,
@@ -224,13 +226,13 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
             (Reply == sent) -> {noreply, State#moveSimulator_state{}};
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                    %1.delete the neighbor 2.send the msg again to the next best link
-              gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg})
+              gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),{noreply, State#moveSimulator_state{}}
           end;
         true -> % if the neighbor is on other computer and not the one that sent me the msg
           PcPid = State#moveSimulator_state.pcPid,
           Reply = gen_server:call(PcPid,{sendMsg,To,BestLink,Msg,{self(),node()}}),
           if
-            (Reply == sent) -> {noreply, State#moveSimulator_state{}};
+            (Reply == sent) -> ok;
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                      %1.delete the neighbor 2.send the msg again to the next best link
               gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg})
@@ -238,7 +240,7 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
               {noreply, State#moveSimulator_state{}}
       end
     catch % if Msg didn't sent
-          _-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
+          _:_-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                   %1.delete the neighbor 2.send the msg again to the next best link
                   gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),
         {noreply, State#moveSimulator_state{}}
@@ -351,7 +353,7 @@ terminate(_Reason, State = #moveSimulator_state{}) ->
   Y = round(State#moveSimulator_state.myY),
   Pid = self(),
   ObjectX = ets:lookup(etsX,X),
-  ObjectY= ets:lookup(etsY,Y),%
+  ObjectY= ets:lookup(etsY,Y),
 
   if ((ObjectX == []) or (ObjectY == []))  -> ok;
   true->
@@ -364,9 +366,13 @@ terminate(_Reason, State = #moveSimulator_state{}) ->
       end,
       if (length(ListY)>0) ->ets:insert(etsY,[{Y,ListY}]);
         true->  ets:delete(etsY,Y)
-      end
-    end,
-    ok.
+      end,
+    ObjectXcheck = ets:lookup(etsX,X),
+    ObjectYcheck= ets:lookup(etsY,Y),
+    if ((ObjectX == []) or (ObjectY == []))  -> ok;
+      true -> terminate(_Reason, State), castPlease(terminateAgain)
+    end
+    end.
 
 %% @private
 %% @doc Convert process state when code is changed
