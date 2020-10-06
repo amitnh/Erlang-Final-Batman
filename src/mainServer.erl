@@ -63,16 +63,17 @@ init([{ComputerNodes,ComputersArea}]) ->
   spawn_link(fun()->testMsgSending() end),
 
   {ok, #mainServer_state{}}.
-testMsgSending()-> receive
-                   after 4000  -> First = ets:first(etsRobins),
+testMsgSending()->
+
+  receive after 4000  ->
+  First = ets:first(etsRobins),
     {PidFrom,NodeFrom} = takeNelement(First,First,rand:uniform(20)),
     {PidTo,NodeTo} = takeNelement(First,First,rand:uniform(20)),
-    if NodeFrom == NodeTo -> testMsgSending();
-      true->
-              computerServer:castPlease({mainServersendingMsg,from,{PidFrom,NodeFrom},to,{PidTo,NodeTo}}),
+%%    if NodeFrom == NodeTo -> testMsgSending();
+%%      true->
               spawn(NodeFrom,gen_server,cast,[PidFrom,{sendMsg,{PidTo,NodeTo},{PidFrom,NodeFrom},helloBanana}])
         , testMsgSending()
-    end
+%%    end
     end.
 
 takeNelement('$end_of_table',Xlast, _) -> Xlast;
@@ -148,7 +149,6 @@ handle_cast({removeRobin,Pid,Node}, State = #mainServer_state{}) ->
 
 %Add a new message to etsMsgs
 handle_cast({addMessage,From,To}, State = #mainServer_state{}) ->
-gen_server:cast({global, tal@ubuntu},{test,{addingLine,from,From,to,To,etsLookupFrom,ets:lookup(etsRobins,From),etsLookupTo,ets:lookup(etsRobins,To)}}),
   ets:insert(etsMsgs, {{From,To}, ?LineFrames}),
   {noreply, State};
 

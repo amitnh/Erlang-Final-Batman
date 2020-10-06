@@ -19,8 +19,8 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 40). % number of processes in all the program "Robins"
--define(DemilitarizedZone, 0). % how much area to add to each computer, "Demilitarized zone".
+-define(N, 120). % number of processes in all the program "Robins"
+-define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
 
@@ -99,7 +99,7 @@ handle_call({sendMsg,To, {FromNeighborPid,FromNeighborNode},Msg,MoveSimFrom}, _F
   end;
 
 handle_call({updateMyMonitor,Mymonitor}, _From, State = #computerStateM_state{}) ->
-{reply, ok, State#computerStateM_state{myMonitor = Mymonitor}};
+{reply, updatedMyMonitor, State#computerStateM_state{myMonitor = Mymonitor}};
 
 %receiveMsg = recieved the msg from neighbor Computer and send it to the right pid
 handle_call({receiveMsg,To, {FromNeighborPid,_FromNeighborNode},Msg,MoveSimFrom}, _From, State = #computerStateM_state{}) ->
@@ -131,7 +131,7 @@ handle_call({updateBorders, {X,Y,Dir,Vel}}, _From, State = #computerStateM_state
 
 handle_call(Request, _From, State = #computerStateM_state{}) ->
   castPlease({computerServerMissedCalls, Request}),
-  {reply, ok, State}.
+  {reply, computerServerMissedCalls, State}.
 
 %% @private
 %% @doc Handling cast messages

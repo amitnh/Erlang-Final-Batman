@@ -22,7 +22,7 @@
 -define(updateEts ,20). %how many time per second to update the ETS's
 -define(velMax , 100). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
--define(radius ,4000).
+-define(radius ,500).
 
 -record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction,myBatman,pcPid}).
 
@@ -181,11 +181,11 @@ updatedXYlocations(State)->
   {stop, Reason :: term(), Reply :: term(), NewState :: #moveSimulator_state{}} |
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
 
-handle_call({receiveMsg,To,Msg,MoveSimFrom}, From, State = #moveSimulator_state{}) ->
-  castPlease({receiveMsg,from,From}),
+handle_call({receiveMsg,To,Msg,MoveSimFrom}, {FromPid,_Ref}, State = #moveSimulator_state{}) ->
+  castPlease({receiveMsg,from,FromPid}),
   gen_server:cast(State#moveSimulator_state.pcPid,{msgSent, MoveSimFrom, {self(),node()}}),
   if (To == {self(),node()}) -> castPlease(Msg); % case the msg is for me -> cast it
-    true-> gen_server:cast(self(),{sendMsg,To, {From,node()},Msg}) % case the msg is not for me -> pass it on
+    true-> gen_server:cast(self(),{sendMsg,To, {FromPid,node()},Msg}) % case the msg is not for me -> pass it on
   end,
   {reply, sent, State};
 
@@ -217,7 +217,7 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
       if
         (From == BestLink) -> % im not sending the msg back to the one that sent it to me, infinite loop
                                     %1.delete the neighbor 2.send the msg again to the next best link
-                                        gen_server:cast(MyBatman, {deleteNeighbor, {BestLinkPid,BestLinkNode},To,Msg});
+                                        gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg});
         (Node == BestLinkNode) -> % if the node is in my pc send it to him directly
           Reply = gen_server:call(BestLinkPid,{receiveMsg,To,Msg,{self(),node()}}),
           if
@@ -228,7 +228,7 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
           end;
         true -> % if the neighbor is on other computer and not the one that sent me the msg
           PcPid = State#moveSimulator_state.pcPid,
-          Reply = gen_server:call(PcPid,{sendMsg,To,BestLinkPid,Msg,{self(),node()}}),
+          Reply = gen_server:call(PcPid,{sendMsg,To,BestLink,Msg,{self(),node()}}),
           if
             (Reply == sent) -> {noreply, State#moveSimulator_state{}};
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
@@ -271,6 +271,7 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
      RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
     RoundedOldY = round(State#moveSimulator_state.myY),
 
+    try
     [{_Keyx,Tempx}] = ets:lookup(etsX,RoundedOldX),
     [{_Keyy,Tempy}] = ets:lookup(etsY,RoundedOldY),
 
@@ -282,7 +283,6 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
       ListY= Tempy;
       true-> ListY =[]
     end,
-
     OldListX = ListX -- [self()],% remove the pid from the old location
     OldListY = ListY -- [self()],
     if (length(OldListX) > 0) ->  ets:insert(etsX,[{RoundedOldX,OldListX}]);%put back the old Locations lists if not empty
@@ -299,6 +299,8 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
     ets:insert(etsX,[{RoundedNewX,NewListX}]), %insert the new Locations lists
     ets:insert(etsY,[{RoundedNewY,NewListY}]),
     {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}
+    catch _:_ -> {stop, normal, State}
+    end
    end;
 
 %%============sendToNeighbors=============================
@@ -351,7 +353,7 @@ terminate(_Reason, State = #moveSimulator_state{}) ->
   ObjectX = ets:lookup(etsX,X),
   ObjectY= ets:lookup(etsY,Y),%
 
-  if (ObjectX == []) -> ok;
+  if ((ObjectX == []) or (ObjectY == []))  -> ok;
   true->
       [{_, TempX}] = ObjectX,
       [{_, TempY}] = ObjectY,

@@ -196,7 +196,6 @@ getMsgPids(XYRobinsLocations,{From,To}) ->
         ets:delete(etsMsgs,Key),
         ets:insert(etsMsgs,{Key,(Timer-1)}),
 %%      Bool = ets:update_element(etsMsgs,Key, {1,(Timer - 1)}),
-      computerServer:castPlease({koresing1,etsMsgs,ets:tab2list(etsMsgs),next,Next}),
 
       getMsgPids(XYRobinsLocations++[{{XFrom div 2,YFrom div 2},{XTo div 2,YTo div 2}}],Next)
       end
