@@ -86,10 +86,25 @@ handle_call({findBestLink, To}, _From, State = #batmanProtocol_state{}) ->
 %%  castPlease({batmanNode,node(),myknown, State#batmanProtocol_state.known}),
   {reply, BestLink, State};
 
+handle_call({getKnownFrom}, _From, State = #batmanProtocol_state{}) ->
+   Known = State#batmanProtocol_state.known,
+   Size =maps:size(Known),
+    KnownList = maps:to_list(Known),
+  if( Size == 0 ) ->
+      {PidTo,NodeTo} = {notfound, notfound};
+    true ->
+      {{PidTo, NodeTo},_Value} = lists:nth(rand:uniform(Size),KnownList)
+  end,
+  {reply, {PidTo,NodeTo}, State};
+
 handle_call(_Request, _From, State = #batmanProtocol_state{}) ->
   castPlease({missedCallBatman, request, _Request, from, _From}),
-
   {reply, ok, State}.
+
+
+
+
+
 
 %% @private
 %% @doc Handling cast messages
@@ -145,12 +160,14 @@ handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},FromAddress}, State = #batmanPr
   end,
   {noreply, NewState};
 
-%Msg failed: delete neighbor and try sending the Msg again
+%Msg failed: delete neighbor
 handle_cast({deleteNeighbor, ToDelete,AddressFrom,Msg},State = #batmanProtocol_state{}) ->
 NewKnown = deleteNeighbor(ToDelete,AddressFrom,State#batmanProtocol_state.known),
-gen_server:cast(State#batmanProtocol_state.pid,{sendMSG,AddressFrom,Msg}),% send the MSG again
 {noreply, State#batmanProtocol_state{known = NewKnown}};
 
+handle_cast({deleteBatman, AddressFrom}, State = #batmanProtocol_state{}) -> %case the batman has no neighbors
+  Known = State#batmanProtocol_state.known,
+  {noreply, State#batmanProtocol_state{known = maps:remove(AddressFrom,Known)}};
 
 
 handle_cast(Request, State = #batmanProtocol_state{}) ->
@@ -184,7 +201,7 @@ terminate(_Reason, _State = #batmanProtocol_state{}) ->
 
 
 
-%% known ->                {key-> Pid@Node, Value -> {Current Seq Number, Best Link, Last Aware Time, list of neighbors}}
+%% known ->                Request{key-> Pid@Node, Value -> {Current Seq Number, Best Link, Last Aware Time, list of neighbors}}
 %% list of neighbors ->    {Pid@Node,sorted-list of in window seq numbers, last TTL, last Valid Time}
 
 
@@ -211,15 +228,23 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
      true-> % neighbor already exists
         IsNewSeq = not (lists:member(SeqNum,SeqList)),
         if  IsNewSeq -> % a new Seq Num
-            if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
+            if (CurrentSeqNumber < SeqNum) ->% a new *Current* Seq Num
               Batman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,TTL), % return a new KnownBatman with everthing updated
               NewKnowBatman = updateBestLink(Batman,OriginatorAddress), % change the best link
-              {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false};
+              if (NewKnowBatman == deleteBatman) ->% if the neighbors list is empty
+                {State#batmanProtocol_state{known = maps:remove(OriginatorAddress,Known)},false,false};
+              true-> % if the neighbors list is not empty, (i have a best link)
+                {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
+                end;
             true->  % not a new Current Seq Num *but* a new SeqNum
 
               Batman = addSeqNum(KnownBatman,FromAddress,SeqNum,lastTTl), % return a new KnownBatman with everthing updated
               NewKnowBatman = updateBestLink(Batman,OriginatorAddress), % change the best link
-              {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
+              if (NewKnowBatman == deleteBatman) ->% if the neighbors list is empty
+                {State#batmanProtocol_state{known = maps:remove(OriginatorAddress,Known)},false,false};
+                true-> % if the neighbors list is not empty, (i have a best link)
+                  {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false}
+              end
             end;
         true-> %not a new Seq -> no process ! but we check if the LastTTL == TTL for Rebroadcasting later
           {State#batmanProtocol_state{},false,LastTTL == TTL}
@@ -285,7 +310,9 @@ updateBestLink({CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors},Batm
   if IsNeighbor -> %if the the ToBatman is acctually my neighbor -> he is the best link
     {CurrentSeqNumber, BatmanAdd, LastAwareTime, ListOfNeighbors};
   true-> % case is not my neighbor-> search for the biggest in-window list
-    {CurrentSeqNumber, getBestLink(ListOfNeighbors,BestLink,0), LastAwareTime, ListOfNeighbors}
+    if (ListOfNeighbors == []) ->  deleteBatman;
+    true-> {CurrentSeqNumber, getBestLink(ListOfNeighbors,BestLink,0), LastAwareTime, ListOfNeighbors}
+    end
   end.
 
 getBestLink([],BestLink,_) ->BestLink;
@@ -311,11 +338,20 @@ findBestLink(To, State) ->
 % deletes Neighbor from KnownBatman in Known, and returns a NewKnown without this Neighbor in KnownBatman
 deleteNeighbor(ToDelete,AddressFrom,Known) ->
   {CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}= maps:get(AddressFrom,Known),
-  NewList = deleteNeighborFronList(ListOfNeighbors,ToDelete), %deletes the Neighbor from list
+  NewList = deleteNeighborFromList(ListOfNeighbors,ToDelete), %deletes the Neighbor from list
   NewKnownBatman =  {CurrentSeqNumber, BestLink, LastAwareTime, NewList},% making new KnownBatman with the new list
-  maps:put(AddressFrom,updateBestLink(NewKnownBatman,AddressFrom),Known). %updates the BestLink in KnownBatman and put it in known (a NewKnown is returned)
-deleteNeighborFronList(ListOfNeighbors, Neighbor) ->
-  deleteNeighborFronList(ListOfNeighbors, Neighbor,[]).
-deleteNeighborFronList([{Neighbor,_,_,_}|ListOfNeighbors], Neighbor,NewList)-> NewList ++ ListOfNeighbors; %if i found the Neighbor put it out of the newList
-deleteNeighborFronList([H|ListOfNeighbors], Neighbor,NewList)-> deleteNeighborFronList(ListOfNeighbors,Neighbor,NewList++[H]).% if its not the Neighbor add it to the new List
+
+  NewKnowBatman = updateBestLink(NewKnownBatman,AddressFrom),
+  if (NewKnowBatman == deleteBatman) ->% if the neighbors list is empty
+    gen_server:cast(self(), {deleteBatman, AddressFrom});
+    true -> % if the neighbors list is not empty, (i have a best link)
+        maps:put(AddressFrom,NewKnowBatman,Known)
+  end. %updates the BestLink in KnownBatman and put it in known (a NewKnown is returned)
+
+
+
+deleteNeighborFromList(ListOfNeighbors, Neighbor) ->
+  deleteNeighborFromList(ListOfNeighbors, Neighbor,[]).
+deleteNeighborFromList([{Neighbor,_,_,_}|ListOfNeighbors], Neighbor,NewList)-> NewList ++ ListOfNeighbors; %if i found the Neighbor put it out of the newList
+deleteNeighborFromList([H|ListOfNeighbors], Neighbor,NewList)-> deleteNeighborFromList(ListOfNeighbors,Neighbor,NewList++[H]).% if its not the Neighbor add it to the new List
 

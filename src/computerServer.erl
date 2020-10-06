@@ -19,7 +19,7 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 120). % number of processes in all the program "Robins"
+-define(N, 40). % number of processes in all the program "Robins"
 -define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
@@ -129,6 +129,11 @@ handle_call({updateBorders, {X,Y,Dir,Vel}}, _From, State = #computerStateM_state
   end,
   {reply, {StartX,EndX,StartY,EndY,ToTerminate}, State};
 
+%returns {PidTo,NodeTo} from batmans known(PidFrom)
+handle_call({getKnownFrom, PidFrom}, _From, State = #computerStateM_state{}) ->
+  {PidTo,NodeTo} = gen_server:call(PidFrom,{getKnownFrom}),
+{reply, {PidTo,NodeTo}, State};
+
 handle_call(Request, _From, State = #computerStateM_state{}) ->
   castPlease({computerServerMissedCalls, Request}),
   {reply, computerServerMissedCalls, State}.
@@ -203,9 +208,11 @@ handle_cast({monitorMe,From}, State = #computerStateM_state{}) ->
 
 %removes Robin from ETS and cast mainServer to do so(Same as above but without X,Y
 handle_cast({removeRobin,Pid}, State = #computerStateM_state{}) ->
-  {X,Y} = searchXYbyPid(Pid),
+%%  {X,Y} = searchXYbyPid(Pid),
+  MainServerNode = State#computerStateM_state.mainServer,
+  gen_server:cast({global, MainServerNode},{removeRobin,Pid,node()}),
 %%  castPlease({removing,pid,Pid,xy,X,Y,ets:tab2list(etsX),ets:tab2list(etsY)}),
-  removeRobin(Pid,X,Y, State),
+%%  removeRobin(Pid,X,Y, State),
   {noreply, State};
 
 handle_cast({msgSent,From,To}, State = #computerStateM_state{}) ->
@@ -261,11 +268,12 @@ code_change(_OldVsn, State = #computerStateM_state{}, _Extra) ->
 %%Neighbor -> returns the node of the computer to my Direction
 neighbor(State,Dir) ->
   ZipLists = lists:zip(State#computerStateM_state.computerNodes,State#computerStateM_state.computersArea),
+  {MySx,_MyEx,MySy,_MyEy} = State#computerStateM_state.myArea,
   case Dir of
-    right -> [Node ||{Node,{_Sx,Ex,_Sy,_Ey}}<- ZipLists, Ex == 2000];
-    left -> [Node ||{Node,{Sx,_Ex,_Sy,_Ey}}<- ZipLists, Sx == 0];
-    up -> [Node ||{Node,{_Sx,_Ex,Sy,_Ey}}<- ZipLists, Sy == 0];
-    down -> [Node ||{Node,{_Sx,_Ex,_Sy,Ey}}<- ZipLists, Ey == 2000];
+    right -> [Node ||{Node,{_Sx,Ex,Sy,_Ey}}<- ZipLists, Ex == 2000, MySy==Sy ];
+    left -> [Node ||{Node,{Sx,_Ex,Sy,_Ey}}<- ZipLists, Sx == 0, MySy==Sy];
+    up -> [Node ||{Node,{Sx,_Ex,Sy,_Ey}}<- ZipLists, Sy == 0 , MySx==Sx];
+    down -> [Node ||{Node,{Sx,_Ex,_Sy,Ey}}<- ZipLists, Ey == 2000,MySx==Sx];
   true->   castPlease({list,ZipLists,dir,Dir,node,error})
 
 end.
@@ -299,24 +307,7 @@ removeRobin(Pid,X,Y, State = #computerStateM_state{}) ->
 
 
 
-monitorRobins(MyComputerServer) ->
-  receive
-    {addRobin, Pid} ->
-%%      castPlease({monitoring,Pid}),
-      erlang:monitor(process,Pid);
 
-    {'DOWN', Ref, process, Pid, normal} ->
-%%      castPlease({normal,ref,Ref,pid,Pid}),
-      gen_server:cast(MyComputerServer,{removeRobin, Pid});
-
-    {'DOWN', Ref, process, Pid,  Reason} ->
-      castPlease({notnormal,ref,Ref,pid,Pid,reason,Reason}),
-      gen_server:cast(MyComputerServer,{removeRobin, Pid}),
-      gen_server:cast(MyComputerServer,{generateRobin});
-
-    SomeError ->   castPlease({zeze,SomeError})
-  end,
-monitorRobins(MyComputerServer).
 
 searchXYbyPid(Pid) ->
   FirstX = ets:first(etsX),
@@ -346,3 +337,21 @@ updateMainServerEts(MainServerNode)-> receive
                                       end, updateMainServerEts(MainServerNode).
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%monitors all robins(move simulators)
+monitorRobins(MyComputerServer) ->
+  receive
+    {addRobin, Pid} ->
+      erlang:monitor(process,Pid);
+
+    {'DOWN', Ref, process, Pid, normal} ->
+      gen_server:cast(MyComputerServer,{removeRobin, Pid});
+
+    {'DOWN', Ref, process, Pid,  Reason} ->
+      castPlease({notnormal,ref,Ref,pid,Pid,reason,Reason}),
+      gen_server:cast(MyComputerServer,{removeRobin, Pid}),
+      gen_server:cast(MyComputerServer,{generateRobin});
+
+    SomeError ->   castPlease({zeze,SomeError})
+  end,
+  monitorRobins(MyComputerServer).

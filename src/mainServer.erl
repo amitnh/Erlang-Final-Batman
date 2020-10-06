@@ -68,12 +68,15 @@ testMsgSending()->
   receive after 4000  ->
   First = ets:first(etsRobins),
     {PidFrom,NodeFrom} = takeNelement(First,First,rand:uniform(20)),
-    {PidTo,NodeTo} = takeNelement(First,First,rand:uniform(20)),
+
+    {PidTo,NodeTo} = gen_server:call({global,NodeFrom},{getKnownFrom, PidFrom}),
+    if(PidTo == notfound ) -> testMsgSending();
+%%    {PidTo,NodeTo} = takeNelement(First,First,rand:uniform(20)),
 %%    if NodeFrom == NodeTo -> testMsgSending();
-%%      true->
+      true->
               spawn(NodeFrom,gen_server,cast,[PidFrom,{sendMsg,{PidTo,NodeTo},{PidFrom,NodeFrom},helloBanana}])
         , testMsgSending()
-%%    end
+    end
     end.
 
 takeNelement('$end_of_table',Xlast, _) -> Xlast;

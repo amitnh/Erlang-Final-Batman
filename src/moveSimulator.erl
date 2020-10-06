@@ -20,9 +20,9 @@
 
 -define(SERVER, ?MODULE).
 -define(updateEts ,20). %how many time per second to update the ETS's
--define(velMax , 100). %range of the random velocity of the node in meter/milisec
+-define(velMax , 30). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
--define(radius ,500).
+-define(radius ,300).
 
 -record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction,myBatman,pcPid}).
 
@@ -189,6 +189,11 @@ handle_call({receiveMsg,To,Msg,MoveSimFrom}, {FromPid,_Ref}, State = #moveSimula
   end,
   {reply, sent, State};
 
+
+handle_call({getKnownFrom}, _From, State = #moveSimulator_state{}) ->
+  {PidTo,NodeTo} = gen_server:call(State#moveSimulator_state.myBatman,{getKnownFrom}),
+  {reply, {PidTo,NodeTo}, State};
+
 handle_call(_Request, _From, State = #moveSimulator_state{}) ->
   castPlease({missedCallMovSim, request, _Request, from, _From}),
   {reply, ok, State}.
@@ -206,6 +211,8 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 
 %%============================================================================================
 %% send MSG to someone using the BATMAN Protocol
+handle_cast({sendMsg,To,To,_Msg}, State = #moveSimulator_state{}) -> % case someone tell me to send Msg to myself
+  {noreply, State#moveSimulator_state{}};
 
 handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
   castPlease({firstSendMsgMoveSimulator,to,To,from,From,msg,Msg}),
@@ -222,20 +229,26 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
                                         gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg});
         (Node == BestLinkNode) -> % if the node is in my pc send it to him directly
           Reply = gen_server:call(BestLinkPid,{receiveMsg,To,Msg,{self(),node()}}),
+
           if
             (Reply == sent) -> {noreply, State#moveSimulator_state{}};
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                    %1.delete the neighbor 2.send the msg again to the next best link
-              gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),{noreply, State#moveSimulator_state{}}
-          end;
+              gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),
+              gen_server:cast(self(),{sendMSG,To,{self(),node()},Msg}),% send the MSG again
+              {noreply, State#moveSimulator_state{}}
+          end,
+          {noreply, State#moveSimulator_state{}};
         true -> % if the neighbor is on other computer and not the one that sent me the msg
           PcPid = State#moveSimulator_state.pcPid,
           Reply = gen_server:call(PcPid,{sendMsg,To,BestLink,Msg,{self(),node()}}),
           if
-            (Reply == sent) -> ok;
+            (Reply == sent) -> {noreply, State#moveSimulator_state{}};
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                      %1.delete the neighbor 2.send the msg again to the next best link
-              gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg})
+              gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),
+              gen_server:cast(self(),{sendMSG,To,{self(),node()},Msg}),% send the MSG again
+              {noreply, State#moveSimulator_state{}}
           end,
               {noreply, State#moveSimulator_state{}}
       end
@@ -326,7 +339,7 @@ handle_cast({stopNormally}, State = #moveSimulator_state{}) ->
 {stop, normal, State};
 
 handle_cast(Request, State = #moveSimulator_state{}) ->
-  castPlease({missedMessegMOVESIM,request,Request}),
+  castPlease({missedcastMOVESIM,request,Request}),
 
   {noreply, State}.
 

@@ -4,4 +4,4 @@ c(computerServer).
 c(batmanProtocol).
 c(moveSimulator).
 c(guiStateM).
-mainServer:start_link([amit@ubuntu, nati@ubuntu],[{0,1000,0,2000},{1000,2000,0,2000}]).
+mainServer:start_link([a@ubuntu, b@ubuntu, c@ubuntu, d@ubuntu],[{0,1000,0,1000},{1000,2000,0,1000},{0,1000,1000,2000},{1000,2000,1000,2000}]).
