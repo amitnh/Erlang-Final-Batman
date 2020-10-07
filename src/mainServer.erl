@@ -171,7 +171,7 @@ handle_cast({addMessage,From,To}, State = #mainServer_state{}) ->
   {noreply, State};
 
 handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
-  io:format("ive got node down and i cannot lie: ~p~n",[{nodedown,node, Node}]),
+  io:format("ive got node down and i cannot lie: ~p~n",[{nodedown,node, MyNode}]),
   % update boarders on all remaining computerServers
   % delete from EtsRobins and spawn new ones, and send the locations to transfer to the new computer
   % if 4 nodes -> computer to the right or to the left takes it and gets X,Y locations
@@ -181,10 +181,10 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
   ComputerAreas = State#mainServer_state.computerAreas,
   ZipLists = lists:zip(ComputerNodes,ComputerAreas),
   [{MySx,MyEx,MySy,MyEy}]= [Area||{Node,Area}<-ZipLists, Node == MyNode], % take the fallen node areas
-  Size = length(ComputerNodes),
+  Size = length(ComputerNodes), % before the "fall down"
   NewComputerNodes = ComputerNodes -- [MyNode],
 
-  if ((Size == 4) or ((Size == 3) and (MySx /= 0) or (MyEx /= 2000))) -> % case: take computer to the right or the left
+  if ((Size == 4) or ((Size == 3) and ((MySx /= 0) or (MyEx /= 2000)))) -> % case: take computer to the right or the left
       [{ChosenNode, {CSx,CEx,CSy,CEy}}] = [{Node, {Sx, Ex, Sy, Ey}} ||{Node,{Sx,Ex,Sy,Ey}}<- ZipLists, ((Ex == MySx) or (MyEx == Sx))],
       ChosenNewArea= {0,2000,CSy,CEy},
       NewComputerAreas = newComputerAreas(ComputerAreas,{MySx,MyEx,MySy,MyEy},{CSx,CEx,CSy,CEy},ChosenNewArea),% removing the dead Node and update the chosen area
@@ -201,14 +201,14 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
 
       ListL =  [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-ets:tab2list(etsRobins),NodeRobin == MyNode, X<1001],
       ListR =  [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-ets:tab2list(etsRobins),NodeRobin == MyNode, X>1000],
-    gen_server:cast({global,NodeL},{newRobinsRand,length(ListL)}), % tell the nodeL to spawn N new Robins
-    gen_server:cast({global,NodeR},{newRobinsRand,length(ListR)});
+    gen_server:cast({global,NodeL},{newRobinsAtXY,ListL}), % tell the nodeL to spawn N new Robins
+    gen_server:cast({global,NodeR},{newRobinsAtXY,ListR});
 
     (Size == 2) -> %case:  the left node takes all and get the locations
-      [LeftNode] = NewComputerNodes,
-      gen_server:cast({global,LeftNode},{newBoarders,NewComputerNodes,[{0,2000,0,2000}]}),
+      [LonleyNode] = NewComputerNodes,
+      gen_server:cast({global,LonleyNode},{newBoarders,NewComputerNodes,[{0,2000,0,2000}]}),
       ListOfXY = [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-ets:tab2list(etsRobins),NodeRobin == MyNode ], % saves all the {X,Y} locations of the dead node
-      gen_server:cast({global,LeftNode},{newRobinsAtXY,ListOfXY});
+      gen_server:cast({global,LonleyNode},{newRobinsAtXY,ListOfXY});
 
     true-> io:format("everyone is dead, byebye"),  %no more nodes -> terminate
            gen_server:stop({global,node()})

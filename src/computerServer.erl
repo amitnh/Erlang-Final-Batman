@@ -227,7 +227,16 @@ handle_cast({generateRobin}, State = #computerStateM_state{}) ->
   spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self()]]),
   {noreply, State};
 
+%someone died, update Boarders, if my boarder updated change it too
+handle_cast({newBoarders,NewComputerNodes,NewComputerAreas}, State = #computerStateM_state{}) ->
+  [NewArea] = [Area||{Node,Area}<-lists:zip(NewComputerNodes,NewComputerAreas),Node == node()], % takes my area from the list of new areas
+  {noreply, State#computerStateM_state{computerNodes = NewComputerNodes,computersArea = NewComputerAreas,myArea = NewArea}};
 
+%(someone died) spawn new Robins at each {X,Y} from ListOfXY
+handle_cast({newRobinsAtXY,ListOfXY}, State = #computerStateM_state{}) ->
+  MyArea = State#computerStateM_state.myArea,
+  [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self(),{X,Y}]])|| {X,Y}<- ListOfXY],
+  {noreply, State#computerStateM_state{}};
 
 %%===================================================================================
 handle_cast(Request, State = #computerStateM_state{}) ->
