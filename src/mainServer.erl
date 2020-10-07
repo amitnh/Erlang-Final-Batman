@@ -170,17 +170,31 @@ handle_cast({addMessage,From,To}, State = #mainServer_state{}) ->
   ets:insert(etsMsgs, {{From,To}, ?LineFrames}),
   {noreply, State};
 
-handle_cast({nodedown, Node}, State = #mainServer_state{}) ->
+handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
   io:format("ive got node down and i cannot lie: ~p~n",[{nodedown,node, Node}]),
   % update boarders on all remaining computerServers
-  % delete from ETSRobins and spawn new ones, and send the locations to transfer to the new computer
+  % delete from EtsRobins and spawn new ones, and send the locations to transfer to the new computer
   % if 4 nodes -> computer to the right or to the left takes it and gets X,Y locations
   % if 3 nodes and sx = 0 and ex = 0 then count the nodes
   % if 2 nodes -> takes all and get the locations
   ComputerNodes = State#mainServer_state.computerNodes,
   ComputerAreas = State#mainServer_state.computerAreas,
+  ZipLists = lists:zip(ComputerNodes,ComputerAreas),
+  [{MySx,MyEx,MySy,MyEy}]= [Area||{Node,Area}<-ZipLists, Node == MyNode], % take the fallen node areas
+  Size = length(ComputerNodes),
+  NewComputerNodes = ComputerNodes -- [MyNode],
 
-  {noreply, State};
+  if ((Size == 4) or ((Size == 3) and (MySx /= 0) or (MyEx /= 2000))) -> % case: take computer to the right or the left
+      [{ChosenNode, {CSx,CEx,CSy,CEy}}] = [{Node, {Sx, Ex, Sy, Ey}} ||{Node,{Sx,Ex,Sy,Ey}}<- ZipLists, ((Ex == MySx) or (MyEx == Sx))],
+      NewComputerAreas = ok, %todo
+      [gen_server:cast({global,Node},{newBoarders,NewComputerNodes,NewComputerAreas})||Node<-NewComputerNodes], % send cast to change server boarders
+      ListOfXY = [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-ets:tab2list(etsRobins),NodeRobin == MyNode ], % saves all the {X,Y} locations of the dead node
+      gen_server:cast({global,ChosenNode},{newRobinsAtXY,ListOfXY}),
+    (Size == 3) ->ok; % special case: take the other 2 nodes and exstend each of them and spawn new Robins
+    (Size == 2) -> ok;%case:  the left node takes all and get the locations
+    true-> io:format("everyone is dead, byebye"), gen_server:stop({global,node()})% no more nodes -> terminate
+  end,
+  {noreply, State#mainServer_state{computerNodes = NewComputerNodes, computerAreas = NewComputerAreas}};
 
 handle_cast(_Request, State = #mainServer_state{}) ->
   moveSimulator:castPlease({missedCallMainSer, request, _Request}),
