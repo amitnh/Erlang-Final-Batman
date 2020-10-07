@@ -183,14 +183,18 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
   [{MySx,MyEx,MySy,MyEy}]= [Area||{Node,Area}<-ZipLists, Node == MyNode], % take the fallen node areas
   Size = length(ComputerNodes), % before the "fall down"
   NewComputerNodes = ComputerNodes -- [MyNode],
+  EtsRobinsList = ets:tab2list(etsRobins),
+  %delete all the Dead Robins from EtsRobins:
+   [ets:delete(etsRobins,{Pid,Node})||{{Pid,Node},_}<-EtsRobinsList, Node==MyNode],
 
   if ((Size == 4) or ((Size == 3) and ((MySx /= 0) or (MyEx /= 2000)))) -> % case: take computer to the right or the left
-      [{ChosenNode, {CSx,CEx,CSy,CEy}}] = [{Node, {Sx, Ex, Sy, Ey}} ||{Node,{Sx,Ex,Sy,Ey}}<- ZipLists, ((Ex == MySx) or (MyEx == Sx))],
+      [{ChosenNode, {CSx,CEx,CSy,CEy}}] = [{Node, {Sx, Ex, Sy, Ey}} ||{Node,{Sx,Ex,Sy,Ey}}<- ZipLists, (((Ex == MySx) or (MyEx == Sx)) and (MySy == Sy) and (MyEy == Ey))],
       ChosenNewArea= {0,2000,CSy,CEy},
       NewComputerAreas = newComputerAreas(ComputerAreas,{MySx,MyEx,MySy,MyEy},{CSx,CEx,CSy,CEy},ChosenNewArea),% removing the dead Node and update the chosen area
       [gen_server:cast({global,Node},{newBoarders,NewComputerNodes,NewComputerAreas})||Node<-NewComputerNodes], % send cast to change server boarders
-      ListOfXY = [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-ets:tab2list(etsRobins),NodeRobin == MyNode ], % saves all the {X,Y} locations of the dead node
-      gen_server:cast({global,ChosenNode},{newRobinsAtXY,ListOfXY});
+      ListOfXY = [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-EtsRobinsList,NodeRobin == MyNode ], % saves all the {X,Y} locations of the dead node
+      gen_server:cast({global,ChosenNode},{newRobinsAtXY,ListOfXY}),
+    {noreply, State#mainServer_state{computerNodes = NewComputerNodes, computerAreas = NewComputerAreas}};
 
     (Size == 3) -> % special case: take the other 2 nodes and extend each of them and spawn new Robins
       NewComputerAreas = [{Sx,Ex,0,2000}|| {Sx,Ex,Sy,Ey}<-ComputerAreas, {Sx,Ex,Sy,Ey} /= {MySx,MyEx,MySy,MyEy}],
@@ -199,21 +203,24 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
 
     [gen_server:cast({global,Node},{newBoarders,NewComputerNodes,NewComputerAreas})||Node<-NewComputerNodes],
 
-      ListL =  [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-ets:tab2list(etsRobins),NodeRobin == MyNode, X<1001],
-      ListR =  [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-ets:tab2list(etsRobins),NodeRobin == MyNode, X>1000],
+      ListL =  [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-EtsRobinsList,NodeRobin == MyNode, X<1001],
+      ListR =  [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-EtsRobinsList,NodeRobin == MyNode, X>1000],
     gen_server:cast({global,NodeL},{newRobinsAtXY,ListL}), % tell the nodeL to spawn N new Robins
-    gen_server:cast({global,NodeR},{newRobinsAtXY,ListR});
+    gen_server:cast({global,NodeR},{newRobinsAtXY,ListR}),
+      {noreply, State#mainServer_state{computerNodes = NewComputerNodes, computerAreas = NewComputerAreas}};
 
     (Size == 2) -> %case:  the left node takes all and get the locations
       [LonleyNode] = NewComputerNodes,
       gen_server:cast({global,LonleyNode},{newBoarders,NewComputerNodes,[{0,2000,0,2000}]}),
-      ListOfXY = [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-ets:tab2list(etsRobins),NodeRobin == MyNode ], % saves all the {X,Y} locations of the dead node
-      gen_server:cast({global,LonleyNode},{newRobinsAtXY,ListOfXY});
+      ListOfXY = [{X,Y}||{{_Pid,NodeRobin},{X,Y}}<-EtsRobinsList,NodeRobin == MyNode ], % saves all the {X,Y} locations of the dead node
+      gen_server:cast({global,LonleyNode},{newRobinsAtXY,ListOfXY}),
+      {noreply, State#mainServer_state{computerNodes = NewComputerNodes, computerAreas = [{0,2000,0,2000}]}};
 
-    true-> io:format("everyone is dead, byebye"),  %no more nodes -> terminate
-           gen_server:stop({global,node()})
-  end,
-  {noreply, State#mainServer_state{computerNodes = NewComputerNodes, computerAreas = NewComputerAreas}};
+
+      true-> io:format("everyone is dead, byebye"),  %no more nodes -> terminate
+           gen_server:stop({global,node()}),
+          {noreply, State#mainServer_state{computerNodes = [], computerAreas = []}}
+  end;
 
 handle_cast(_Request, State = #mainServer_state{}) ->
   moveSimulator:castPlease({missedCallMainSer, request, _Request}),
@@ -259,5 +266,5 @@ code_change(_OldVsn, State = #mainServer_state{}, _Extra) ->
 newComputerAreas(ComputerAreas,DeadArea, ChosenOldArea, ChosenNewArea) ->newComputerAreas(ComputerAreas,DeadArea, ChosenOldArea, ChosenNewArea,[]).
 newComputerAreas([],_DeadArea, _ChosenOldArea, _ChosenNewArea,List) ->List;
 newComputerAreas([DeadArea|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,List);
-newComputerAreas([ChosenOldArea|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,ChosenNewArea ++ List);
-newComputerAreas([H|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,H ++ List).
+newComputerAreas([ChosenOldArea|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,[ChosenNewArea] ++ List);
+newComputerAreas([H|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,[H] ++ List).

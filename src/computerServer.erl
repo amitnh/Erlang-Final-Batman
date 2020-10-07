@@ -152,6 +152,7 @@ handle_cast({createBatman,{X,Y,Dir,Vel}}, State = #computerStateM_state{})->
 {noreply, State};
 
 handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #computerStateM_state{}) -> %todo todo only temp
+  try
   {StartX,EndX,_,_}= State#computerStateM_state.myArea,
   DisToLeft = MyX - StartX,
   DisToRight = EndX - MyX,
@@ -167,9 +168,12 @@ handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #compu
       gen_server:cast({global, Node2},{ogmFromNeighbor,MyX,MyY,OGM,{PidFrom,NodeFrom}});
       true->{noreply, State}
     end
-  end,
+  end
+    catch _:_ -> noNeighbor %no Neighbor probebly node down
+end,
   {noreply, State};
 handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #computerStateM_state{}) -> %todo todo only temp
+  try
   {_,_,StartY,EndY}= State#computerStateM_state.myArea,
   DisToUp = MyY - StartY,
   DisToDown = EndY - MyY,
@@ -187,7 +191,9 @@ handle_cast({sendOGMtoNeighborsY,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #compu
         gen_server:cast({global, Node2},{ogmFromNeighbor,MyX,MyY,OGM,{PidFrom,NodeFrom}});
         true->{noreply, State}
       end
-  end,
+  end
+catch _:_ -> noNeighbor %no Neighbor probebly node down
+end,
   {noreply, State};
 %%===================================================================================
 
@@ -235,7 +241,7 @@ handle_cast({newBoarders,NewComputerNodes,NewComputerAreas}, State = #computerSt
 %(someone died) spawn new Robins at each {X,Y} from ListOfXY
 handle_cast({newRobinsAtXY,ListOfXY}, State = #computerStateM_state{}) ->
   MyArea = State#computerStateM_state.myArea,
-  [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self(),{X,Y}]])|| {X,Y}<- ListOfXY],
+  [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self(),{X,Y,0,0}]])|| {X,Y}<- ListOfXY],
   {noreply, State#computerStateM_state{}};
 
 %%===================================================================================
