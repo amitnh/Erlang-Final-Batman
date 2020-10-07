@@ -26,21 +26,20 @@
 -define(UpdateTime, 1000). % time for sending the ETSES tables
 -define(LineFrames, 80). %number of frames to show the line
 
--record(mainServer_state, {}).
+-record(mainServer_state, {computerNodes,computerAreas}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %% @doc Spawns the server and registers the local name (unique)
--spec(start_link(ComputerNodes::list(),ComputersArea::list()) ->
+-spec(start_link(ComputerNodes::list(),ComputerAreas::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
-% ComputersArea-> [{startX,endX,startY,endY},...] size 4
-start_link(ComputerNodes,ComputersArea) ->
-    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}],[]),% [{debug,[trace]}]). %TODO delete trace
-
-  guiStateM:start_link(ComputerNodes).
+% ComputerAreas-> [{startX,endX,startY,endY},...] size 4
+start_link(ComputerNodes,ComputerAreas) ->
+    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputerAreas}],[]),% [{debug,[trace]}]). %TODO delete trace
+    guiStateM:start_link(ComputerNodes).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -52,17 +51,18 @@ start_link(ComputerNodes,ComputersArea) ->
   {ok, State :: #mainServer_state{}} | {ok, State :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 
-init([{ComputerNodes,ComputersArea}]) ->
+init([{ComputerNodes,ComputerAreas}]) ->
   % etsRobins: {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
   ets:new(etsRobins,[set,public,named_table]),
   ets:new(etsMsgs,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
 
 %%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers todo
-%%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputersArea), % saves the Nodes area todo
-  spawnComputer(ComputerNodes,ComputersArea,loop),
+%%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputerAreas), % saves the Nodes area todo
+  spawn_link(fun()->monitorComputers(ComputerNodes,node()) end),
+  spawnComputer(ComputerNodes,ComputerAreas,loop),
   spawn_link(fun()->testMsgSending() end),
 
-  {ok, #mainServer_state{}}.
+  {ok, #mainServer_state{computerNodes = ComputerNodes,computerAreas = ComputerAreas}}.
 testMsgSending()->
 
   receive after 4000  ->
@@ -87,13 +87,26 @@ takeNelement(X,_Xlast, N) ->
 %a process updateMainServer sends every UpdateTime mili secs the ETS tables to the main server
 
 %start server for computer for each node in the ComputerNodes list
-spawnComputer(ComputerNodes,ComputersArea,loop) -> [spawnComputer(ComputerNodes,ComputersArea,Node) || Node<- ComputerNodes];
+spawnComputer(ComputerNodes,ComputerAreas,loop) -> [spawnComputer(ComputerNodes,ComputerAreas,Node) || Node<- ComputerNodes];
 % spawns a Computer at a specific node and monitors it
-spawnComputer(ComputerNodes,ComputersArea,Node) ->
-  erlang:monitor_node(Node,true),  % makes the mainServer monitor the new computer at Node todo maybe i dont have to ?
-  spawn(Node,computerServer,start_link,[[ComputerNodes,ComputersArea,node()]]).
+spawnComputer(ComputerNodes,ComputerAreas,Node) ->
 
+  spawn(Node,computerServer,start_link,[[ComputerNodes,ComputerAreas,node()]]).
 
+%%==================================================================================
+%%monitors all computer Servers(move simulators)
+%%==================================================================================
+monitorComputers(ComputerNodes,MainServerNode) ->
+  [erlang:monitor_node(Node,true)||Node<-ComputerNodes], % monitors all the nodes/computerServers
+  monitorComputersReceieveLoop(MainServerNode).
+
+monitorComputersReceieveLoop(MainServerNode)->
+  receive
+    {nodedown,Node} -> gen_server:cast({global,MainServerNode},{nodedown, Node});
+    SomeError ->   moveSimulator:castPlease({someError,SomeError})
+  end,
+  monitorComputersReceieveLoop(MainServerNode).
+%%==================================================================================
 
 %% @private
 %% @doc Handling call messages
@@ -157,6 +170,17 @@ handle_cast({addMessage,From,To}, State = #mainServer_state{}) ->
   ets:insert(etsMsgs, {{From,To}, ?LineFrames}),
   {noreply, State};
 
+handle_cast({nodedown, Node}, State = #mainServer_state{}) ->
+  io:format("ive got node down and i cannot lie: ~p~n",[{nodedown,node, Node}]),
+  % update boarders on all remaining computerServers
+  % delete from ETSRobins and spawn new ones, and send the locations to transfer to the new computer
+  % if 4 nodes -> computer to the right or to the left takes it and gets X,Y locations
+  % if 3 nodes and sx = 0 and ex = 0 then count the nodes
+  % if 2 nodes -> takes all and get the locations
+  ComputerNodes = State#mainServer_state.computerNodes,
+  ComputerAreas = State#mainServer_state.computerAreas,
+
+  {noreply, State};
 
 handle_cast(_Request, State = #mainServer_state{}) ->
   moveSimulator:castPlease({missedCallMainSer, request, _Request}),
