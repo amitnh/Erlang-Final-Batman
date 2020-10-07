@@ -161,6 +161,7 @@ timer()->
   timer().
 
 do_refresh(C,NodesList)->
+  moveSimulator:castPlease({etsRobins,ets:tab2list(etsRobins)}),
 
   EtsList = ets:tab2list(etsRobins),
   DC = wxPaintDC:new(C),

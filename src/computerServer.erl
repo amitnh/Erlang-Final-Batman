@@ -241,6 +241,7 @@ handle_cast({newBoarders,NewComputerNodes,NewComputerAreas}, State = #computerSt
 %(someone died) spawn new Robins at each {X,Y} from ListOfXY
 handle_cast({newRobinsAtXY,ListOfXY}, State = #computerStateM_state{}) ->
   MyArea = State#computerStateM_state.myArea,
+  castPlease({newRobinsAtXY,node,node(),area,MyArea}),
   [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self(),{X,Y,0,0}]])|| {X,Y}<- ListOfXY],
   {noreply, State#computerStateM_state{}};
 

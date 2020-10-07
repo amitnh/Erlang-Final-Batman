@@ -189,6 +189,7 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
 
   if ((Size == 4) or ((Size == 3) and ((MySx /= 0) or (MyEx /= 2000)))) -> % case: take computer to the right or the left
       [{ChosenNode, {CSx,CEx,CSy,CEy}}] = [{Node, {Sx, Ex, Sy, Ey}} ||{Node,{Sx,Ex,Sy,Ey}}<- ZipLists,(MySy == Sy),(MyEy == Ey),(Node /= MyNode)],
+     moveSimulator:castPlease({chosenNode,{ChosenNode, {CSx,CEx,CSy,CEy}}}),
       ChosenNewArea= {0,2000,CSy,CEy},
       NewComputerAreas = newComputerAreas(ComputerAreas,{MySx,MyEx,MySy,MyEy},{CSx,CEx,CSy,CEy},ChosenNewArea),% removing the dead Node and update the chosen area
       [gen_server:cast({global,Node},{newBoarders,NewComputerNodes,NewComputerAreas})||Node<-NewComputerNodes], % send cast to change server boarders
@@ -217,7 +218,7 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
       {noreply, State#mainServer_state{computerNodes = NewComputerNodes, computerAreas = [{0,2000,0,2000}]}};
 
 
-      true-> io:format("everyone is dead, byebye"),  %no more nodes -> terminate
+      true-> io:format("everyone i knew died, bye bye"),  %no more nodes -> terminate
            gen_server:stop({global,node()}),
           {noreply, State#mainServer_state{computerNodes = [], computerAreas = []}}
   end;
@@ -266,5 +267,5 @@ code_change(_OldVsn, State = #mainServer_state{}, _Extra) ->
 newComputerAreas(ComputerAreas,DeadArea, ChosenOldArea, ChosenNewArea) ->newComputerAreas(ComputerAreas,DeadArea, ChosenOldArea, ChosenNewArea,[]).
 newComputerAreas([],_DeadArea, _ChosenOldArea, _ChosenNewArea,List) ->List;
 newComputerAreas([DeadArea|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,List);
-newComputerAreas([ChosenOldArea|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,[ChosenNewArea] ++ List);
-newComputerAreas([H|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,[H] ++ List).
+newComputerAreas([ChosenOldArea|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea, List ++ [ChosenNewArea]);
+newComputerAreas([H|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,List ++ [H]).

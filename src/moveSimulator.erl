@@ -96,7 +96,7 @@ init([{StartX,EndX,StartY,EndY},DemiZone,PCPid,{X,Y,Dir,Vel}]) ->
         demiZone = DemiZone,myX = Xnew,myY = Ynew,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
 
   true ->  %receiving a new batman from another computer
-    ListX = listToUpdate(ets:lookup(etsX,X),X),
+      ListX = listToUpdate(ets:lookup(etsX,X),X),
       ListY = listToUpdate(ets:lookup(etsY,Y),Y),
       ets:insert(etsX,ListX),
       ets:insert(etsY,ListY),
