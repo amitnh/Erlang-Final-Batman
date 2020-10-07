@@ -188,7 +188,7 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
    [ets:delete(etsRobins,{Pid,Node})||{{Pid,Node},_}<-EtsRobinsList, Node==MyNode],
 
   if ((Size == 4) or ((Size == 3) and ((MySx /= 0) or (MyEx /= 2000)))) -> % case: take computer to the right or the left
-      [{ChosenNode, {CSx,CEx,CSy,CEy}}] = [{Node, {Sx, Ex, Sy, Ey}} ||{Node,{Sx,Ex,Sy,Ey}}<- ZipLists, (((Ex == MySx) or (MyEx == Sx)) and (MySy == Sy) and (MyEy == Ey))],
+      [{ChosenNode, {CSx,CEx,CSy,CEy}}] = [{Node, {Sx, Ex, Sy, Ey}} ||{Node,{Sx,Ex,Sy,Ey}}<- ZipLists,(MySy == Sy),(MyEy == Ey),(Node /= MyNode)],
       ChosenNewArea= {0,2000,CSy,CEy},
       NewComputerAreas = newComputerAreas(ComputerAreas,{MySx,MyEx,MySy,MyEy},{CSx,CEx,CSy,CEy},ChosenNewArea),% removing the dead Node and update the chosen area
       [gen_server:cast({global,Node},{newBoarders,NewComputerNodes,NewComputerAreas})||Node<-NewComputerNodes], % send cast to change server boarders
