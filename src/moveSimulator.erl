@@ -87,8 +87,8 @@ vectorTimer(Pid)->
 %%    demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
 
 %if a batman is switching computer with specific X,Y locations
-init([{StartX,EndX,StartY,EndY},{Radius,DemiZone,OGMTime,MaxVelocity,WindowSize,TTL},PCPid,{X,Y,Dir,Vel}]) ->
-  {ok, MyBatman} = batmanProtocol:start_link([self(),{OGMTime,WindowSize,TTL}]), %creates batmanProtocol and link it to this process
+init([{StartX,EndX,StartY,EndY},{Radius,_NumofRobins,DemiZone,OGMTime,MaxVelocity,WindowSize,TTL},PCPid,{X,Y,Dir,Vel}]) ->
+   MyBatman = batmanProtocol:start_link(self(),{OGMTime,WindowSize,TTL}), %creates batmanProtocol and link it to this process
 
   if( {X,Y,Dir,Vel} == {0,0,0,0} )->%%initiating field
       {Xnew,Ynew} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
@@ -104,7 +104,7 @@ init([{StartX,EndX,StartY,EndY},{Radius,DemiZone,OGMTime,MaxVelocity,WindowSize,
         demiZone = DemiZone,radius = Radius,velMax = MaxVelocity, myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=Vel,direction=Dir,myBatman = MyBatman,pcPid = PCPid}}
   end;
 
-init(_)-> castPlease(errorInArea).
+init(_A)-> castPlease({initMovSimError,_A}).
 
 
 
@@ -152,7 +152,7 @@ updatedXYlocations(State)->
               try %wait for the computerServer to bring back an answer about the borders
                 {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,{updateBorders,{round(X),round(Y),State#moveSimulator_state.direction,State#moveSimulator_state.velocity}}),
                 if ToTerminate ->
-                  gen_server:cast(self(),{stopNormally});
+                  gen_server:cast(self(),stop);
                   %gen_server:stop(self());%Shut down MoveSimulator Server
       %%          gen_server:stop(State#moveSimulator_state.myBatman,normal,1000),%Moving to another computer, Shut down Batman Server
       %%        gen_server:stop(self(), {normal,round(X),round(Y)},infinity);%Shut down MoveSimulator Server
@@ -196,6 +196,9 @@ handle_call({getKnownFrom}, _From, State = #moveSimulator_state{}) ->
       {reply, {PidTo,NodeTo}, State}
     catch _:_ -> {reply, {notfound,notfound}, State}
   end;
+
+handle_call(stop, _From, State = #moveSimulator_state{}) ->
+  {stop, normal, State};
 
 handle_call(_Request, _From, State = #moveSimulator_state{}) ->
   castPlease({missedCallMovSim, request, _Request, from, _From}),
@@ -338,7 +341,7 @@ handle_cast({ogm,OGM,{Pid,Node}}, State = #moveSimulator_state{}) ->
   gen_server:cast(Batman,{ogm,OGM,{Pid,Node}}),
 {noreply, State};
 
-handle_cast({stopNormally}, State = #moveSimulator_state{}) ->
+handle_cast(stop, State = #moveSimulator_state{}) ->
 {stop, normal, State};
 
 handle_cast(Request, State = #moveSimulator_state{}) ->
@@ -354,6 +357,7 @@ handle_cast(Request, State = #moveSimulator_state{}) ->
   {noreply, NewState :: #moveSimulator_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
 handle_info(_Info, State = #moveSimulator_state{}) ->
+  castPlease({movSimInfo, _Info}),
   {noreply, State}.
 
 %% @private
@@ -365,6 +369,7 @@ handle_info(_Info, State = #moveSimulator_state{}) ->
     State :: #moveSimulator_state{}) -> term()).
 
 terminate(_Reason, State = #moveSimulator_state{}) ->
+  try
   Batman = State#moveSimulator_state.myBatman,
 %%  gen_server:cast(Batman,{stopping}),
   X = round(State#moveSimulator_state.myX),
@@ -391,9 +396,10 @@ terminate(_Reason, State = #moveSimulator_state{}) ->
       true -> terminate(_Reason, State), castPlease(terminateAgain)
     end
     end,
-    gen_server:stop(Batman),
-
-    castPlease(okDeadMovSim),
+    castPlease(gen_server:cast(Batman,stop)),
+    castPlease(okDeadMovSim)
+    catch _:M -> castPlease({movSimTerminate,catchError,M})
+    end,
     ok.
 
 %% @private
@@ -485,29 +491,3 @@ getCircle(MyX,MyY,Square) -> R = ?radius,
 getLineInRadius(ETS,X) -> lists:flatten([[{RobinX,{Pid,node()}}||Pid<-Pids]|| {RobinX,Pids}<- ets:tab2list(ETS),((RobinX<X+?radius) or(RobinX>X-?radius)) ]).
 
 
-
-
-%%===========================================================
-%%% getNext and getPrev works on etsX or etsY
-%% they return a list of Location and pids, in the same computerServer in the radius range
-%%===========================================================
-getNext(_,_,'$end_of_table',List)-> List;
-getNext(_,MyX,NextX,List) when ((NextX - MyX) > ?radius) ->  List;  % case nextX not in range
-getNext(Ets,MyX,NextX,List)  -> % case nextX in range
-  Object= ets:lookup(Ets,NextX), % Value contains the list of Pids
-  if (Object == []) -> getNext(Ets,MyX,MyX,[]); % if there is an error start over
-    true -> [{_Key,Pids}] = Object,
-    NewList = List ++ [{NextX,{Pid,node()}}||Pid<-Pids],
-    getNext(Ets,MyX,ets:next(Ets,NextX),NewList)
-end.
-
-getPrev(_,_,'$end_of_table',List)-> List;
-getPrev(_,MyX,PrevX,List) when ((MyX - PrevX) > ?radius) ->  List;  % case prevX not in range
-getPrev(Ets,MyX,PrevX,List)  -> % case prevX in range
-  Object = ets:lookup(Ets,PrevX), % Value contains the list of Pids
-  if (Object == []) -> getPrev(Ets,MyX,MyX,[]); % if there is an error start over
-    true -> [{_Key,Pids}] = Object,
-  NewList =  [{PrevX,{Pid,node()}}||Pid<-Pids] ++ List,
-  getPrev(Ets,MyX,ets:prev(Ets,PrevX),NewList)
-end.
-%%===========================================================

@@ -233,7 +233,7 @@ paint(cast, {sendnewStats,Env}, State = #guiStateM_state{sliders = Sliders}) ->
   TTL = wxSlider:getValue(SliderTTL),
   MainServer = State#guiStateM_state.mainServer,
   moveSimulator:castPlease({sendingsliders,{Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}}),
-  gen_server:cast({global,MainServer},{newStats, {{Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}}}),
+  gen_server:cast({global,MainServer},{newStats, {Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}}),
   {next_state, paint, State};
 
 paint(cast, _, State = #guiStateM_state{}) ->

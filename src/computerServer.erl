@@ -24,7 +24,7 @@
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
 
--record(computerStateM_state, {computerNodes,computersArea, myArea,myMonitor,mainServer,demiZone,numofRobins}).
+-record(computerStateM_state, {computerNodes,computersArea, myArea,myMonitor,mainServer,specs}).
 %%test TODO delete
 castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
@@ -62,9 +62,9 @@ init([ComputerNodes,ComputersArea,Specs,MainServerNode]) -> %gets the area of th
   ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   MyArea = getArea(ComputerNodes,ComputersArea,node()),
-  initRobins(MyArea,{Radius,DemiZone,OGMTime,MaxVelocity,WindowSize,TTL} ),   %% spawn N/4 Robins and monitors them
+  initRobins(MyArea,{Radius,NumofRobins,DemiZone,OGMTime,MaxVelocity,WindowSize,TTL} ),   %% spawn N/4 Robins and monitors them
 
-  {ok, #computerStateM_state{demiZone = DemiZone,numofRobins = NumofRobins, computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea,myMonitor = updatedLater ,mainServer = MainServerNode}}. %saves the area border
+  {ok, #computerStateM_state{specs = Specs, computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea,myMonitor = updatedLater ,mainServer = MainServerNode}}. %saves the area border
 
 % gets My Area from lists of nodes and areas
 getArea([],[],_)-> areaCantBeFound;
@@ -140,6 +140,7 @@ handle_call({getKnownFrom, PidFrom}, _From, State = #computerStateM_state{}) ->
   end;
 
 
+
 handle_call(Request, _From, State = #computerStateM_state{}) ->
   castPlease({computerServerMissedCalls, Request}),
   {reply, computerServerMissedCalls, State}.
@@ -154,8 +155,13 @@ handle_call(Request, _From, State = #computerStateM_state{}) ->
 %%===================================================================================
 handle_cast({createBatman,{X,Y,Dir,Vel}}, State = #computerStateM_state{})->
 %spawn a Robin and monitor it, we add the DemilitarizedZone, so the moveSimulator will know it
-  spawn(moveSimulator,start_link,[[State#computerStateM_state.myArea,?DemilitarizedZone,self(),{X,Y,Dir,Vel}]]),
+  Specs = State#computerStateM_state.specs,
+
+  spawn(moveSimulator,start_link,[[State#computerStateM_state.myArea,Specs,self(),{X,Y,Dir,Vel}]]),
 {noreply, State};
+
+handle_cast(stop, State = #computerStateM_state{}) ->
+  {stop, normal, State};
 
 handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #computerStateM_state{}) -> %todo todo only temp
   try
@@ -268,6 +274,7 @@ handle_cast(Request, State = #computerStateM_state{}) ->
   {noreply, NewState :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #computerStateM_state{}}).
 handle_info(_Info, State = #computerStateM_state{}) ->
+  castPlease({comSerInfo, _Info}),
   {noreply, State}.
 
 %% @private
@@ -279,10 +286,8 @@ handle_info(_Info, State = #computerStateM_state{}) ->
     State :: #computerStateM_state{}) -> term()).
 terminate(_Reason, _State = #computerStateM_state{}) ->
   %when computer server terminates, he kills all robins
-  [[gen_server:stop(Pid)||Pid<-Pids]|| {_RobinX,Pids}<- ets:tab2list(etsX)],
-  receive
-    after 500 -> ok
-  end,
+  [[gen_server:cast(Pid,stop)||Pid<-Pids]|| {_RobinX,Pids}<- ets:tab2list(etsX)],
+
   ok.
 
 %% @private

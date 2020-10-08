@@ -75,7 +75,7 @@ init([ComputerNodes, ComputerAreas]) ->
 
   {ok, #mainServer_state{processes = [], computerNodes = ComputerNodes,computerAreas = ComputerAreas, specs = {300,100, 50,1000,10,128,30}}}.
 testMsgSending()->
-
+ try
   receive after 4000  ->
   First = ets:first(etsRobins),
     {PidFrom,NodeFrom} = takeNelement(First,First,rand:uniform(20)),
@@ -88,7 +88,8 @@ testMsgSending()->
               spawn(NodeFrom,gen_server,cast,[PidFrom,{sendMsg,{PidTo,NodeTo},{PidFrom,NodeFrom},helloBanana}])
         , testMsgSending()
     end
-    end.
+    end
+catch _:_ -> testMsgSending() end.
 
 takeNelement('$end_of_table',Xlast, _) -> Xlast;
 takeNelement(X,_Xlast, 0) -> X;
@@ -114,7 +115,7 @@ monitorComputers(ComputerNodes,MainServerNode) ->
 
 monitorComputersReceieveLoop(MainServerNode)->
   receive
-    {nodedown,Node} -> gen_server:cast({global,MainServerNode},{nodedown, Node});
+    {nodedown,Node} ->moveSimulator:castPlease({nodedown,papapapokerface}), gen_server:cast({global,MainServerNode},{nodedown, Node});
     SomeError ->   moveSimulator:castPlease({someError,SomeError})
   end,
   monitorComputersReceieveLoop(MainServerNode).
@@ -247,7 +248,8 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
 %Restart ComputerServers with the new Stats, also send each ComputerServer his old robins XY values
 handle_cast({newStats,NewSpecs}, State = #mainServer_state{}) ->
   Nodes = State#mainServer_state.computerNodes,
-  [gen_server:stop({global,Node})||Node<-Nodes],
+%%  [gen_server:stop({global,Node})||Node<-Nodes],
+  [gen_server:cast({global, Node}, stop)||Node<-Nodes],
 
 %%  [gen_server:cast({global,Node},{stopping})||Node<-Nodes],
   receive

@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1]).
+-export([start_link/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -42,14 +42,14 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
 
 %% @doc Spawns the server and registers the local name (unique)
--spec(start_link(PidMoveSimulator:: term()) ->
+-spec(start_link(PidMoveSimulator:: term(),Specs:: tuple()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link([PidMoveSimulator,{OGMTime,WindowSize,TTL}]) ->
+start_link(PidMoveSimulator,{OGMTime,WindowSize,TTL}) ->
   {ok,Pid} = gen_server:start_link(?MODULE, [PidMoveSimulator,{OGMTime,WindowSize,TTL}], []), %{debug,[trace]}
   receive
   after rand:uniform(?ORIGINATOR_INTERVAL) ->  spawn_link(fun()->ogmLoop(Pid) end) % every Robins start sending OGMs after random time up to 1 interval
   end,
-  {ok,Pid}. %sends cast to OGM every ORIGINATOR_INTERVAL
+  Pid. %sends cast to OGM every ORIGINATOR_INTERVAL
 
 
 ogmLoop(Pid)-> % sends OGM cast to batmanProtocol to send OGM every ?ORIGINATOR_INTERVAL time
@@ -96,6 +96,9 @@ handle_call({getKnownFrom}, _From, State = #batmanProtocol_state{}) ->
       {{PidTo, NodeTo},_Value} = lists:nth(rand:uniform(Size),KnownList)
   end,
   {reply, {PidTo,NodeTo}, State};
+
+
+
 
 handle_call(_Request, _From, State = #batmanProtocol_state{}) ->
   castPlease({missedCallBatman, request, _Request, from, _From}),
@@ -169,7 +172,7 @@ handle_cast({deleteBatman, AddressFrom}, State = #batmanProtocol_state{}) -> %ca
   Known = State#batmanProtocol_state.known,
   {noreply, State#batmanProtocol_state{known = maps:remove(AddressFrom,Known)}};
 
-handle_cast({stopping}, State = #batmanProtocol_state{}) ->
+handle_cast(stop, State = #batmanProtocol_state{}) ->
   {stop, normal, State};
 
 handle_cast(Request, State = #batmanProtocol_state{}) ->
@@ -184,6 +187,7 @@ handle_cast(Request, State = #batmanProtocol_state{}) ->
   {noreply, NewState :: #batmanProtocol_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #batmanProtocol_state{}}).
 handle_info(_Info, State = #batmanProtocol_state{}) ->
+  castPlease({batmanInfo, _Info}),
   {noreply, State}.
 
 %% @private
