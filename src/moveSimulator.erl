@@ -24,7 +24,7 @@
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 -define(radius ,300).
 
--record(moveSimulator_state, {startX,endX,startY,endY,demiZone,myX,myY,time,velocity,direction,myBatman,pcPid}).
+-record(moveSimulator_state, {startX,endX,startY,endY,demiZone,radius,velMax,myX,myY,time,velocity,direction,myBatman,pcPid}).
 
 
 %%test TODO delete
@@ -37,14 +37,14 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %% @doc Spawns the server and registers the local name (unique)
 -spec(start_link(List::term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link([Area,DemiZone,PCPid]) ->
-  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone,PCPid,{0,0,0,0}], []),%{debug,[trace]}
+start_link([Area,Specs,PCPid]) ->
+  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,Specs,PCPid,{0,0,0,0}], []),%{debug,[trace]}
   spawn_link(fun()->etsTimer(Pid) end) ,
   spawn_link(fun()->vectorTimer(Pid) end);
 
 %if a batman is switching computer
-start_link([Area,DemiZone,PCPid,{X,Y,Dir,Vel}]) ->
-  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,DemiZone,PCPid,{X,Y,Dir,Vel}], []),%{debug,[trace]}
+start_link([Area,Specs,PCPid,{X,Y,Dir,Vel}]) ->
+  {ok,Pid} = gen_server:start_link( ?MODULE, [Area,Specs,PCPid,{X,Y,Dir,Vel}], []),%{debug,[trace]}
 
   spawn_link(fun()->etsTimer(Pid) end),
   spawn_link(fun()->vectorTimer(Pid) end),
@@ -87,13 +87,13 @@ vectorTimer(Pid)->
 %%    demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
 
 %if a batman is switching computer with specific X,Y locations
-init([{StartX,EndX,StartY,EndY},DemiZone,PCPid,{X,Y,Dir,Vel}]) ->
-  {ok, MyBatman} = batmanProtocol:start_link(self()), %creates batmanProtocol and link it to this process
+init([{StartX,EndX,StartY,EndY},{Radius,DemiZone,OGMTime,MaxVelocity,WindowSize,TTL},PCPid,{X,Y,Dir,Vel}]) ->
+  {ok, MyBatman} = batmanProtocol:start_link([self(),{OGMTime,WindowSize,TTL}]), %creates batmanProtocol and link it to this process
 
   if( {X,Y,Dir,Vel} == {0,0,0,0} )->%%initiating field
       {Xnew,Ynew} = startLocation(StartX,EndX,StartY,EndY), % put my new random location in the etsX and etsY
       {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
-        demiZone = DemiZone,myX = Xnew,myY = Ynew,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
+        demiZone = DemiZone,radius = Radius,velMax = MaxVelocity,  myX = Xnew,myY = Ynew,time = erlang:system_time(millisecond),velocity=0,direction=0,myBatman = MyBatman,pcPid = PCPid}};
 
   true ->  %receiving a new batman from another computer
       ListX = listToUpdate(ets:lookup(etsX,X),X),
@@ -101,7 +101,7 @@ init([{StartX,EndX,StartY,EndY},DemiZone,PCPid,{X,Y,Dir,Vel}]) ->
       ets:insert(etsX,ListX),
       ets:insert(etsY,ListY),
       {ok, #moveSimulator_state{startX = StartX,endX = EndX,startY = StartY,endY = EndY,
-        demiZone = DemiZone,myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=Vel,direction=Dir,myBatman = MyBatman,pcPid = PCPid}}
+        demiZone = DemiZone,radius = Radius,velMax = MaxVelocity, myX = X,myY = Y,time = erlang:system_time(millisecond),velocity=Vel,direction=Dir,myBatman = MyBatman,pcPid = PCPid}}
   end;
 
 init(_)-> castPlease(errorInArea).
@@ -191,8 +191,11 @@ handle_call({receiveMsg,To,Msg,MoveSimFrom}, {FromPid,_Ref}, State = #moveSimula
 
 
 handle_call({getKnownFrom}, _From, State = #moveSimulator_state{}) ->
-  {PidTo,NodeTo} = gen_server:call(State#moveSimulator_state.myBatman,{getKnownFrom}),
-  {reply, {PidTo,NodeTo}, State};
+  try
+      {PidTo,NodeTo} = gen_server:call(State#moveSimulator_state.myBatman,{getKnownFrom}),
+      {reply, {PidTo,NodeTo}, State}
+    catch _:_ -> {reply, {notfound,notfound}, State}
+  end;
 
 handle_call(_Request, _From, State = #moveSimulator_state{}) ->
   castPlease({missedCallMovSim, request, _Request, from, _From}),
@@ -362,6 +365,8 @@ handle_info(_Info, State = #moveSimulator_state{}) ->
     State :: #moveSimulator_state{}) -> term()).
 
 terminate(_Reason, State = #moveSimulator_state{}) ->
+  Batman = State#moveSimulator_state.myBatman,
+%%  gen_server:cast(Batman,{stopping}),
   X = round(State#moveSimulator_state.myX),
   Y = round(State#moveSimulator_state.myY),
   Pid = self(),
@@ -382,10 +387,14 @@ terminate(_Reason, State = #moveSimulator_state{}) ->
       end,
     ObjectXcheck = ets:lookup(etsX,X),
     ObjectYcheck= ets:lookup(etsY,Y),
-    if ((ObjectX == []) or (ObjectY == []))  -> ok;
+    if ((ObjectXcheck == []) or (ObjectYcheck == []))  -> ok;
       true -> terminate(_Reason, State), castPlease(terminateAgain)
     end
-    end.
+    end,
+    gen_server:stop(Batman),
+
+    castPlease(okDeadMovSim),
+    ok.
 
 %% @private
 %% @doc Convert process state when code is changed
