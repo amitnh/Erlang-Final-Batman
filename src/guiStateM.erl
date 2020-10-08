@@ -73,13 +73,20 @@ init([ComputerNodes,MainServerNode]) ->
 
   F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width+600,?Height+100}}]),  %Creates the main frame for the gui
   P = wxPanel:new(F, [{size, {?Width,?Height-100}}]), % a panel we will split with sizers
-  C = wxPanel:new(P, [{style, ?wxFULL_REPAINT_ON_RESIZE},{size, {?Height,?Width-100}}]), %the main canvas to print on the points
+  C = wxPanel:new(P, [{style, ?wxFULL_REPAINT_ON_RESIZE},{size, {?Height+200,?Width+200}}]), %the main canvas to print on the points
 
 
   MainSizer = wxBoxSizer:new(?wxVERTICAL),      %main sizer for alignment within the panel
-  Sizer = wxStaticBoxSizer:new(?wxVERTICAL, P, [{label, "Batman bounderies"}]), %inside frame for batman protocol display
-  T = wxStaticText:new(P, -1, "Click to start",[]),
-  LiveStats = wxStaticText:new(P, -1, "",[]),
+  Sizer = wxStaticBoxSizer:new(?wxVERTICAL, P, [{label, "B.A.T.M.A.N Field"}]), %inside frame for batman protocol display
+  T = wxStaticText:new(P, -1, "Click to Start",[]),
+  LiveStats = wxStaticText:new(P, -1, "Number of Processes: ",[]),
+  Radiuslabel = wxStaticText:new(P, -1, "Radius:",[]),
+  NumofRoblabel = wxStaticText:new(P, -1, "Number of Batmans: ",[]),
+  Demilabel = wxStaticText:new(P, -1, "Demiliterized Zone: ",[]),
+  OGMlabel = wxStaticText:new(P, -1, "Originator Interval: ",[]),
+  MaxVellabel = wxStaticText:new(P, -1, "Max Velocity: ",[]),
+  WindowSizelabel = wxStaticText:new(P, -1, "Window Size: ",[]),
+  TTLlabel = wxStaticText:new(P, -1, "TTL: ",[]),
 
   %create a botton to initiate batman protocol and connect it to its event handler
   B = wxButton:new(P, 0, [{label, "Start"}, {size, {150, 50}}]),
@@ -115,34 +122,72 @@ init([ComputerNodes,MainServerNode]) ->
   Sliders = {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime,SliderMaxVelocity,SliderWindowSize,SliderTTL},
 %%  Sizer2 = wxBoxSizer:new(P,?wxHORIZONTAL),
   Sizer1 = wxGridSizer:new(0,1,3,3),
-  wxSizer:addSpacer(Sizer, 20),
+  wxSizer:addSpacer(Sizer, 5),
   wxSizer:add(Sizer, T, [{border, 5}, {flag, ?wxALL}]),
 
   Sizer2 = wxGridSizer:new(0,2,3,3),
   Sizer3 = wxGridSizer:new(0,2,3,3),
-  Sizer4 = wxGridSizer:new(0,2,3,3),
+  Sizer4 = wxGridSizer:new(0,2,5,5),
   wxSizer:add(Sizer2, B, [{border, 5}, {flag, ?wxALL}]),
 %%  wxSizer:addSpacer(Sizer2, 20),
 
   wxSizer:add(Sizer2, Bapply, [{border, 5}, {flag, ?wxALL}]),
+%%  RadiusSizer = wxStaticBoxSizer:new(?wxVERTICAL, P), %inside frame for batman protocol display
+%%  RadiusSizer = wxGridSizer:new(0,1,1,1),
+%%  NumofRobinsSizer = wxGridSizer:new(0,1,1,1),
+%%  DemiZoneSizer = wxGridSizer:new(0,1,1,1),
+%%  OGMTimeSizer = wxGridSizer:new(0,1,1,1),
+%%  MaxVelocitySizer = wxGridSizer:new(0,1,1,1),
+%%  WindowSizeSizer = wxGridSizer:new(0,1,1,1),
+%%  TTLSizer = wxGridSizer:new(0,1,1,1),
 
-  wxSizer:add(Sizer2, SliderRadius, [{flag, ?wxEXPAND}]),
-  wxSizer:add(Sizer2, SliderNumofRobins, [{flag, ?wxEXPAND}]),
-  wxSizer:add(Sizer2, SliderDemiZone, [{flag, ?wxEXPAND}]),
-  wxSizer:add(Sizer2, SliderOGMTime, [{flag, ?wxEXPAND}]),
-  wxSizer:add(Sizer2, SliderMaxVelocity, [{flag, ?wxEXPAND}]),
-  wxSizer:add(Sizer2, SliderWindowSize, [{flag, ?wxEXPAND}]),
-  wxSizer:add(Sizer2, SliderTTL, [{flag, ?wxEXPAND}]),
+  RadiusSizer = wxStaticBoxSizer:new(?wxVERTICAL, P),
+  wxSizer:add(RadiusSizer,Radiuslabel, [{flag, ?wxEXPAND}]),
+  wxSizer:add(RadiusSizer,SliderRadius, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, RadiusSizer, [{flag, ?wxEXPAND}]),
+
+  NumofRobinsSizer = wxStaticBoxSizer:new(?wxVERTICAL, P),
+  wxSizer:add(NumofRobinsSizer,NumofRoblabel, [{flag, ?wxEXPAND}]),
+  wxSizer:add(NumofRobinsSizer,SliderNumofRobins, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, NumofRobinsSizer, [{flag, ?wxEXPAND}]),
+
+  DemiZoneSizer = wxStaticBoxSizer:new(?wxVERTICAL, P),
+  wxSizer:add(DemiZoneSizer,Demilabel, [{flag, ?wxEXPAND}]),
+  wxSizer:add(DemiZoneSizer,SliderDemiZone, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, DemiZoneSizer, [{flag, ?wxEXPAND}]),
+
+  OGMSizer = wxStaticBoxSizer:new(?wxVERTICAL, P),
+  wxSizer:add(OGMSizer,OGMlabel, [{flag, ?wxEXPAND}]),
+  wxSizer:add(OGMSizer,SliderOGMTime, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, OGMSizer, [{flag, ?wxEXPAND}]),
+
+  MaxVelocitySizer = wxStaticBoxSizer:new(?wxVERTICAL, P),
+  wxSizer:add(MaxVelocitySizer,MaxVellabel, [{flag, ?wxEXPAND}]),
+  wxSizer:add(MaxVelocitySizer,SliderMaxVelocity, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, MaxVelocitySizer, [{flag, ?wxEXPAND}]),
+
+  WindowSizer = wxStaticBoxSizer:new(?wxVERTICAL, P),
+  wxSizer:add(WindowSizer,WindowSizelabel, [{flag, ?wxEXPAND}]),
+  wxSizer:add(WindowSizer,SliderWindowSize, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, WindowSizer, [{flag, ?wxEXPAND}]),
+
+  TTLSizer = wxStaticBoxSizer:new(?wxVERTICAL, P),
+  wxSizer:add( TTLSizer, TTLlabel, [{flag, ?wxEXPAND}]),
+  wxSizer:add( TTLSizer,SliderTTL, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, TTLSizer, [{flag, ?wxEXPAND}]),
 
 %%  wxSizer:addSpacer(Sizer2, 5),
   wxSizer:add(Sizer2, LiveStats, [{border, 5}, {flag, ?wxALL}]),
 %%  wxSizer:addSpacer(Sizer2, 5),
+
+
+
   wxSizer:add(Sizer3, C, [{flag, ?wxEXPAND}, {proportion, 1}]),
 
   wxSizer:add(Sizer4, Sizer2),
   wxSizer:add(Sizer4, Sizer3),
   wxSizer:add(Sizer1, Sizer4),
-  wxSizer:addSpacer(Sizer, 20),
+  wxSizer:addSpacer(Sizer, 5),
   wxSizer:add(Sizer, Sizer4),
 
   wxSizer:add(MainSizer, Sizer, [{flag, ?wxEXPAND}, {proportion, 1}]),
@@ -253,7 +298,7 @@ do_refresh(#guiStateM_state{numOfProcesses = NumOfProcess, liveStats = LiveStats
   DC = wxBufferedPaintDC:new(C),
   wxDC:clear(DC),
 
-  wxStaticText:setLabel(LiveStats, NumOfProcess),
+  wxStaticText:setLabel(LiveStats, ["Number of processes: ",NumOfProcess]),
 
   wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
   wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
