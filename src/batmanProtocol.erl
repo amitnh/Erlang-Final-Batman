@@ -20,7 +20,7 @@
 -define(SERVER, ?MODULE).
 
 %%%===================================================================
--record(batmanProtocol_state, {known,pid,seqNum,ogmTime ,windowSize , ttl}).
+-record(batmanProtocol_state, {known,pid,seqNum,ogmTime ,windowSize , ttl,tokill}).
 %% pid - the pid of my moveSimulator for putting it inside OGM / MSG
 %% -------------------------------------------------------
 %% known is a map of known Robins in the system
@@ -47,16 +47,19 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 start_link(PidMoveSimulator,{OGMTime,WindowSize,TTL}) ->
   {ok,Pid} = gen_server:start_link(?MODULE, [PidMoveSimulator,{OGMTime,WindowSize,TTL}], []), %{debug,[trace]}
   receive
-  after rand:uniform(?ORIGINATOR_INTERVAL) ->  spawn_link(fun()->ogmLoop(Pid) end) % every Robins start sending OGMs after random time up to 1 interval
+  after rand:uniform(?ORIGINATOR_INTERVAL) ->  OGMPid = spawn_link(fun()->ogmLoop(Pid) end) % every Robins start sending OGMs after random time up to 1 interval
   end,
+  gen_server:cast(Pid,{tokillonshutdown,OGMPid}),
   Pid. %sends cast to OGM every ORIGINATOR_INTERVAL
 
 
 ogmLoop(Pid)-> % sends OGM cast to batmanProtocol to send OGM every ?ORIGINATOR_INTERVAL time
   receive
-  after ?ORIGINATOR_INTERVAL -> gen_server:cast(Pid,{sendOGM})
-  end,
-  ogmLoop(Pid).
+    exit_please -> ok
+  after ?ORIGINATOR_INTERVAL -> gen_server:cast(Pid,{sendOGM}),
+        ogmLoop(Pid)
+  end.
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -168,12 +171,16 @@ handle_cast({deleteNeighbor, ToDelete,AddressFrom,Msg},State = #batmanProtocol_s
 NewKnown = deleteNeighbor(ToDelete,AddressFrom,State#batmanProtocol_state.known),
 {noreply, State#batmanProtocol_state{known = NewKnown}};
 
+handle_cast({tokillonshutdown,OGMPid}, State = #batmanProtocol_state{}) -> %case the batman has no neighbors
+
+{noreply, State#batmanProtocol_state{tokill = [OGMPid]}};
+
 handle_cast({deleteBatman, AddressFrom}, State = #batmanProtocol_state{}) -> %case the batman has no neighbors
   Known = State#batmanProtocol_state.known,
   {noreply, State#batmanProtocol_state{known = maps:remove(AddressFrom,Known)}};
 
 handle_cast(stop, State = #batmanProtocol_state{}) ->
-  {stop, normal, State};
+  {stop, shutdown, State};
 
 handle_cast(Request, State = #batmanProtocol_state{}) ->
   castPlease({missedMessegBATMAN,request,Request}),
@@ -198,6 +205,8 @@ handle_info(_Info, State = #batmanProtocol_state{}) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #batmanProtocol_state{}) -> term()).
 terminate(_Reason, _State = #batmanProtocol_state{}) ->
+  Tokill = _State#batmanProtocol_state.tokill,
+  [Pid!{exit_please}||Pid<-Tokill],
   castPlease(okDeadBatman),
   ok.
 

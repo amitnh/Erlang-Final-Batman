@@ -389,6 +389,8 @@ monitorRobins(MyComputerServer) ->
     {'DOWN', Ref, process, Pid, normal} ->
       gen_server:cast(MyComputerServer,{removeRobin, Pid});
 
+    {'DOWN', Ref, process, Pid, shutdown} ->castPlease({shuttingdown,ref,Ref,pid,Pid});
+
     {'DOWN', Ref, process, Pid,  Reason} ->
       castPlease({notnormal,ref,Ref,pid,Pid,reason,Reason}),
       gen_server:cast(MyComputerServer,{removeRobin, Pid}),

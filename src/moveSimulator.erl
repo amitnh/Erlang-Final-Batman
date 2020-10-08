@@ -24,7 +24,7 @@
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
 -define(radius ,300).
 
--record(moveSimulator_state, {startX,endX,startY,endY,demiZone,radius,velMax,myX,myY,time,velocity,direction,myBatman,pcPid}).
+-record(moveSimulator_state, {startX,endX,startY,endY,demiZone,radius,velMax,myX,myY,time,velocity,direction,myBatman,pcPid,tokill}).
 
 
 %%test TODO delete
@@ -39,8 +39,9 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area,Specs,PCPid]) ->
   {ok,Pid} = gen_server:start_link( ?MODULE, [Area,Specs,PCPid,{0,0,0,0}], []),%{debug,[trace]}
-  spawn_link(fun()->etsTimer(Pid) end) ,
-  spawn_link(fun()->vectorTimer(Pid) end);
+  Pid1 = spawn_link(fun()->etsTimer(Pid) end) ,
+  Pid2 = spawn_link(fun()->vectorTimer(Pid) end),
+  gen_server:cast(Pid,{tokillonshutdown,[Pid1,Pid2]});
 
 %if a batman is switching computer
 start_link([Area,Specs,PCPid,{X,Y,Dir,Vel}]) ->
@@ -220,6 +221,10 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 handle_cast({sendMsg,To,To,_Msg}, State = #moveSimulator_state{}) -> % case someone tell me to send Msg to myself
   {noreply, State#moveSimulator_state{}};
 
+handle_cast({tokillonshutdown,OGMPids}, State = #moveSimulator_state{}) -> %case the batman has no neighbors
+
+  {noreply, State#moveSimulator_state{tokill = OGMPids}};
+
 handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
   castPlease({firstSendMsgMoveSimulator,to,To,from,From,msg,Msg}),
   MyBatman = State#moveSimulator_state.myBatman,
@@ -342,7 +347,7 @@ handle_cast({ogm,OGM,{Pid,Node}}, State = #moveSimulator_state{}) ->
 {noreply, State};
 
 handle_cast(stop, State = #moveSimulator_state{}) ->
-{stop, normal, State};
+{stop, shutdown, State};
 
 handle_cast(Request, State = #moveSimulator_state{}) ->
   castPlease({missedcastMOVESIM,request,Request}),
@@ -369,37 +374,45 @@ handle_info(_Info, State = #moveSimulator_state{}) ->
     State :: #moveSimulator_state{}) -> term()).
 
 terminate(_Reason, State = #moveSimulator_state{}) ->
-  try
   Batman = State#moveSimulator_state.myBatman,
-%%  gen_server:cast(Batman,{stopping}),
-  X = round(State#moveSimulator_state.myX),
-  Y = round(State#moveSimulator_state.myY),
-  Pid = self(),
-  ObjectX = ets:lookup(etsX,X),
-  ObjectY= ets:lookup(etsY,Y),
+  gen_server:cast(Batman,stop),
+  Tokill = State#moveSimulator_state.tokill,
+  [Pid!{exit_please}||Pid<-Tokill],
+  if _Reason == shutdown -> ok;
+    true ->
+    try
 
-  if ((ObjectX == []) or (ObjectY == []))  -> ok;
-  true->
-      [{_, TempX}] = ObjectX,
-      [{_, TempY}] = ObjectY,
-      ListX = TempX -- [Pid],% remove the pid from the old location
-      ListY = TempY -- [Pid],
-      if (length(ListX)>0 )->ets:insert(etsX,[{X,ListX}]);
-        true->  ets:delete(etsX,X)
+    X = round(State#moveSimulator_state.myX),
+    Y = round(State#moveSimulator_state.myY),
+    Pid = self(),
+
+    ObjectX = ets:lookup(etsX,X),
+    ObjectY= ets:lookup(etsY,Y),
+
+    if ((ObjectX == []) or (ObjectY == []))  -> castPlease({ok2}),ok;
+    true->
+        [{_, TempX}] = ObjectX,
+        [{_, TempY}] = ObjectY,
+        ListX = TempX -- [Pid],% remove the pid from the old location
+        ListY = TempY -- [Pid],
+        if (length(ListX)>0 )->ets:insert(etsX,[{X,ListX}]);
+          true->  ets:delete(etsX,X)
+        end,
+        if (length(ListY)>0) ->ets:insert(etsY,[{Y,ListY}]);
+          true->  ets:delete(etsY,Y)
+        end,
+      castPlease({ok3}),
+      ObjectXcheck = ets:lookup(etsX,X),
+      ObjectYcheck= ets:lookup(etsY,Y),
+      if ((ObjectXcheck == []) or (ObjectYcheck == []))  -> ok;
+        true -> terminate(_Reason, State), castPlease(terminateAgain)
+      end
       end,
-      if (length(ListY)>0) ->ets:insert(etsY,[{Y,ListY}]);
-        true->  ets:delete(etsY,Y)
+      castPlease(gen_server:cast(Batman,stop)),
+      castPlease(okDeadMovSim)
+      catch _:M -> castPlease({movSimTerminate,catchError,M})
+      end
       end,
-    ObjectXcheck = ets:lookup(etsX,X),
-    ObjectYcheck= ets:lookup(etsY,Y),
-    if ((ObjectXcheck == []) or (ObjectYcheck == []))  -> ok;
-      true -> terminate(_Reason, State), castPlease(terminateAgain)
-    end
-    end,
-    castPlease(gen_server:cast(Batman,stop)),
-    castPlease(okDeadMovSim)
-    catch _:M -> castPlease({movSimTerminate,catchError,M})
-    end,
     ok.
 
 %% @private

@@ -131,33 +131,11 @@ init([ComputerNodes,MainServerNode]) ->
   wxSizer:add(MainSizer, Sizer, [{flag, ?wxEXPAND}, {proportion, 1}]),
   wxPanel:setSizer(P, MainSizer),
   wxSizer:layout(MainSizer),
+
   %Frame is ready for display
-  DC = wxClientDC:new(C),
-
-  ClientDC = wxClientDC:new(C),
-  Bitmap = wxBitmap:new(?Width,?Width),
-%%  wxWindow:refresh(C),
-
-
-%%  B = wxBitmap:new(wxImage:scale(Image,450,450)),
-
-
-
-
-%%  DC = wxClientDC:new(P),
-%%  Bitmap = wxBitmap:new(?Width,?Height),
-
-%%  wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
-%%  wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
-%%  wxDC:clear(DC),
-%%  wxDC:drawRectangle(DC,{0,0},{1000,1000}),
-%%  wxDC:drawLine(DC,{500,0},{500,1000}),
-%%  wxDC:drawLine(DC,{0,500},{1000,500}),
-%%  wxPaintDC:destroy(DC),
-%%  initcanvas(C),
   wxFrame:show(F),
   {ok, waiting, #guiStateM_state{mainServer = MainServerNode, env = Env, canvas = C,frame = F,panel = P,
-        text = T,dc = ClientDC, bitmap = Bitmap, nodesList = NodesList,liveStats = LiveStats, sliders = Sliders,
+        text = T, nodesList = NodesList,liveStats = LiveStats, sliders = Sliders,
     numOfProcesses ="0"}}.
 
 
@@ -251,28 +229,13 @@ handle_click(#wx{obj = Obj, userData = #{text := T, env := Env}},_Event) ->
 handle_sync_event(#wx{event=#wxErase{}}, _, _) -> ok.
 
 
-do_refresh(#guiStateM_state{numOfProcesses = NumOfProcess, liveStats = LiveStats, frame = F, bitmap = Bitmap,dc = CDC,canvas = C,nodesList = NodesList},EtsList)->
-%%  wxDC:clear(CDC),
-%%  B = wxBitmap:new(Image),
-%%
-%%  DC = wxClientDC:new(B),
-%%  Bitmap = wxBitmap:new(Image),
+do_refresh(#guiStateM_state{numOfProcesses = NumOfProcess, liveStats = LiveStats, frame = F,
+  canvas = C,nodesList = NodesList},EtsList)->
 
-%%  moveSimulator:castPlease({etsRobins,ets:tab2list(etsRobins)}),
-
-%%  CDC = State#guiStateM_state.dc,
-%%  CDC = wxWindowDC:new(C),
-%%  EtsList = ets:tab2list(etsRobins),
-%%  wxMemoryDC:destroy(DC),
-%%  wxDC:clear(DC),
-%%  DC = wxMemoryDC:new(Bitmap),
-%%  integer_to_list(gen_server:call({global,node()}, {getNumberOfProcesses})
-%% moveSimulator:castPlease({numofproc,NumOfProcess}),
-
-  wxStaticText:setLabel(LiveStats, NumOfProcess),
-  DC = wxWindowDC:new(C),
+  DC = wxBufferedPaintDC:new(C),
   wxDC:clear(DC),
 
+  wxStaticText:setLabel(LiveStats, NumOfProcess),
 
   wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
   wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
@@ -283,8 +246,7 @@ do_refresh(#guiStateM_state{numOfProcesses = NumOfProcess, liveStats = LiveStats
   [ paintCirclesinColors(DC,NodesList,Node,X,Y) || {{_Pid,Node},{X,Y}}<- EtsList],
   wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),
   [wxDC:drawLine(DC,XYFrom,XYTo)||{XYFrom,XYTo}<-getMsgPids()],
-  wxDC:blit(CDC, {0,0},{?Width,?Width},DC, {0,0}),
-  wxWindowDC:destroy(DC),
+  wxBufferedPaintDC:destroy(DC),
   wxWindow:show(F).
 
 

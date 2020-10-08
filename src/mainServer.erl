@@ -319,6 +319,6 @@ newProcesses(FromNode, NumOfProcesses, ProcessesList, List)-> L = List ++ Proces
 
 refreshtimer(Gui)->
   receive
-  after 1000 div ?RefreshRate -> gen_statem:cast(Gui, {refresh, ets:tab2list(etsRobins)})
+  after  1000 div ?RefreshRate -> gen_statem:cast(Gui, {refresh, ets:tab2list(etsRobins)})
   end,
   refreshtimer(Gui).
