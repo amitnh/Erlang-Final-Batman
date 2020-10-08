@@ -238,6 +238,7 @@ handle_event(_EventType, _EventContent, _StateName, State = #guiStateM_state{}) 
   NextStateName = the_next_state_name,
   {next_state, NextStateName, State}.
 
+
 %% @private
 %% @doc This function is called by a gen_statem when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
