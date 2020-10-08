@@ -71,7 +71,7 @@ init([ComputerNodes,MainServerNode]) ->
   wx_object:start(?MODULE, [Env], []),
   NodesList = [{lists:nth(N,ComputerNodes),lists:nth(N,[?wxGREEN,?wxBLUE,?wxRED,?wxCYAN])}||N<-Seq],
 
-  F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width+300,?Height+400}}]),  %Creates the main frame for the gui
+  F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width+600,?Height+100}}]),  %Creates the main frame for the gui
   P = wxPanel:new(F, [{size, {?Width,?Height-100}}]), % a panel we will split with sizers
   C = wxPanel:new(P, [{style, ?wxFULL_REPAINT_ON_RESIZE},{size, {?Height,?Width-100}}]), %the main canvas to print on the points
 
@@ -113,22 +113,40 @@ init([ComputerNodes,MainServerNode]) ->
       ?wxSL_LABELS}]),
   %MaxVelocity,WindowSize,TTL
   Sliders = {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime,SliderMaxVelocity,SliderWindowSize,SliderTTL},
-  Sizer2 = wxBoxSizer:new(?wxHORIZONTAL),
-  wxSizer:add(Sizer, B, [{border, 5}, {flag, ?wxALL}]),
-  wxSizer:add(Sizer, Sizer2, [{proportion, 0}, {flag, ?wxEXPAND}]),
-
-
-  wxSizer:add(Sizer, SliderRadius, [{flag, ?wxEXPAND}]),
-  wxSizer:add(Sizer, SliderNumofRobins, [{flag, ?wxEXPAND}]),
-  wxSizer:add(Sizer, SliderDemiZone, [{flag, ?wxEXPAND}]),
-  wxSizer:add(Sizer, SliderOGMTime, [{flag, ?wxEXPAND}]),
-
-  wxSizer:addSpacer(Sizer, 5),
+%%  Sizer2 = wxBoxSizer:new(P,?wxHORIZONTAL),
+  Sizer1 = wxGridSizer:new(0,1,3,3),
+  wxSizer:addSpacer(Sizer, 20),
   wxSizer:add(Sizer, T, [{border, 5}, {flag, ?wxALL}]),
-  wxSizer:add(Sizer, LiveStats, [{border, 5}, {flag, ?wxALL}]),
-  wxSizer:addSpacer(Sizer, 5),
-  wxSizer:add(Sizer, C, [{flag, ?wxEXPAND}, {proportion, 1}]),
+
+  Sizer2 = wxGridSizer:new(0,2,3,3),
+  Sizer3 = wxGridSizer:new(0,2,3,3),
+  Sizer4 = wxGridSizer:new(0,2,3,3),
+  wxSizer:add(Sizer2, B, [{border, 5}, {flag, ?wxALL}]),
+%%  wxSizer:addSpacer(Sizer2, 20),
+
+  wxSizer:add(Sizer2, Bapply, [{border, 5}, {flag, ?wxALL}]),
+
+  wxSizer:add(Sizer2, SliderRadius, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, SliderNumofRobins, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, SliderDemiZone, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, SliderOGMTime, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, SliderMaxVelocity, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, SliderWindowSize, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer2, SliderTTL, [{flag, ?wxEXPAND}]),
+
+%%  wxSizer:addSpacer(Sizer2, 5),
+  wxSizer:add(Sizer2, LiveStats, [{border, 5}, {flag, ?wxALL}]),
+%%  wxSizer:addSpacer(Sizer2, 5),
+  wxSizer:add(Sizer3, C, [{flag, ?wxEXPAND}, {proportion, 1}]),
+
+  wxSizer:add(Sizer4, Sizer2),
+  wxSizer:add(Sizer4, Sizer3),
+  wxSizer:add(Sizer1, Sizer4),
+  wxSizer:addSpacer(Sizer, 20),
+  wxSizer:add(Sizer, Sizer4),
+
   wxSizer:add(MainSizer, Sizer, [{flag, ?wxEXPAND}, {proportion, 1}]),
+%%  wxSizer:add(MainSizer, Sizer, [{flag, ?wxEXPAND}, {proportion, 1}]),
   wxPanel:setSizer(P, MainSizer),
   wxSizer:layout(MainSizer),
 
