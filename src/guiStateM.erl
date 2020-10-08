@@ -34,6 +34,8 @@
   nodesList,  %#[{Node,Color} , {node, Color },,,]
   bitmap,
   dc,
+  liveStats,
+  numOfProcesses,
   sliders
 }).
 %%-record(guiStateM_state, {}).
@@ -45,8 +47,11 @@
 %% @doc Creates a gen_statem process which calls Module:init/1 to
 %% initialize. To ensure a synchronized start-up procedure, this
 %% function does not return until Module:init/1 has returned.
-start_link([ComputerNodes,MainServerNode]) ->
-  gen_statem:start_link({global, ?SERVER}, ?MODULE, [ComputerNodes,MainServerNode], []).
+start_link([ComputerNodes, MainServerNode]) ->
+  {ok,Pid} = gen_statem:start_link({global, ?SERVER}, ?MODULE, [ComputerNodes,MainServerNode], []),
+  spawn_link(fun()-> refreshtimer(Pid) end),
+  Pid.
+
 
 %%%===================================================================
 %%% gen_statem callbacks
@@ -74,6 +79,7 @@ init([ComputerNodes,MainServerNode]) ->
   MainSizer = wxBoxSizer:new(?wxVERTICAL),      %main sizer for alignment within the panel
   Sizer = wxStaticBoxSizer:new(?wxVERTICAL, P, [{label, "Batman bounderies"}]), %inside frame for batman protocol display
   T = wxStaticText:new(P, -1, "Click to start",[]),
+  LiveStats = wxStaticText:new(P, -1, "",[]),
 
   %create a botton to initiate batman protocol and connect it to its event handler
   B = wxButton:new(P, 0, [{label, "Start"}, {size, {150, 50}}]),
@@ -96,7 +102,17 @@ init([ComputerNodes,MainServerNode]) ->
   SliderOGMTime = wxSlider:new(P, 1, 100, 1, 3000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  Sliders = {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime},
+  SliderMaxVelocity = wxSlider:new(P, 1, 100, 1, 3000,
+    [{style, ?wxSL_HORIZONTAL bor
+      ?wxSL_LABELS}]),
+  SliderWindowSize = wxSlider:new(P, 1, 100, 1, 3000,
+    [{style, ?wxSL_HORIZONTAL bor
+      ?wxSL_LABELS}]),
+  SliderTTL = wxSlider:new(P, 1, 100, 1, 3000,
+    [{style, ?wxSL_HORIZONTAL bor
+      ?wxSL_LABELS}]),
+  %MaxVelocity,WindowSize,TTL
+  Sliders = {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime,SliderMaxVelocity,SliderWindowSize,SliderTTL},
   Sizer2 = wxBoxSizer:new(?wxHORIZONTAL),
   wxSizer:add(Sizer, B, [{border, 5}, {flag, ?wxALL}]),
   wxSizer:add(Sizer, Sizer2, [{proportion, 0}, {flag, ?wxEXPAND}]),
@@ -109,6 +125,7 @@ init([ComputerNodes,MainServerNode]) ->
 
   wxSizer:addSpacer(Sizer, 5),
   wxSizer:add(Sizer, T, [{border, 5}, {flag, ?wxALL}]),
+  wxSizer:add(Sizer, LiveStats, [{border, 5}, {flag, ?wxALL}]),
   wxSizer:addSpacer(Sizer, 5),
   wxSizer:add(Sizer, C, [{flag, ?wxEXPAND}, {proportion, 1}]),
   wxSizer:add(MainSizer, Sizer, [{flag, ?wxEXPAND}, {proportion, 1}]),
@@ -140,7 +157,8 @@ init([ComputerNodes,MainServerNode]) ->
 %%  initcanvas(C),
   wxFrame:show(F),
   {ok, waiting, #guiStateM_state{mainServer = MainServerNode, env = Env, canvas = C,frame = F,panel = P,
-        text = T,dc = ClientDC, bitmap = Bitmap, nodesList = NodesList, sliders = Sliders}}.
+        text = T,dc = ClientDC, bitmap = Bitmap, nodesList = NodesList,liveStats = LiveStats, sliders = Sliders,
+    numOfProcesses ="0"}}.
 
 
 
@@ -196,19 +214,26 @@ paint(cast, {refresh,ETS}, State = #guiStateM_state{}) ->
   do_refresh(State,ETS),
   {next_state, paint, State};
 
+
+paint(cast, {numOfProcesses,NumOfProcesses}, State = #guiStateM_state{}) ->
+{next_state, paint, State#guiStateM_state{numOfProcesses = NumOfProcesses}};
+
 %Sliders = {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime},
 %send to mainServer the new stats the user inserted in sliders
 paint(cast, {sendnewStats,Env}, State = #guiStateM_state{sliders = Sliders}) ->
 
   wx:set_env(Env),
-  {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime} = Sliders,
+  {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime,SliderMaxVelocity,SliderWindowSize,SliderTTL} = Sliders,
   Radius = wxSlider:getValue(SliderRadius),
   NumofRobins = wxSlider:getValue(SliderNumofRobins),
   DemiZone = wxSlider:getValue(SliderDemiZone),
-  OGMTime = wxSlider:getValue(SliderOGMTime),
+  ORIGINATOR_INTERVAL = wxSlider:getValue(SliderOGMTime),
+  MaxVelocity =wxSlider:getValue(SliderMaxVelocity),
+  WindowSize = wxSlider:getValue(SliderWindowSize),
+  TTL = wxSlider:getValue(SliderTTL),
   MainServer = State#guiStateM_state.mainServer,
-  moveSimulator:castPlease({sendingsliders,{Radius,NumofRobins, DemiZone,OGMTime,MainServer}}),
-  gen_server:cast({global,MainServer},{newStats,Radius,NumofRobins,DemiZone,OGMTime}),
+  moveSimulator:castPlease({sendingsliders,{Radius,NumofRobins, DemiZone,ORIGINATOR_INTERVAL,MainServer}}),
+  gen_server:cast({global,MainServer},{newStats, {{Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}}}),
   {next_state, paint, State};
 
 paint(cast, _, State = #guiStateM_state{}) ->
@@ -226,7 +251,7 @@ handle_click(#wx{obj = Obj, userData = #{text := T, env := Env}},_Event) ->
 handle_sync_event(#wx{event=#wxErase{}}, _, _) -> ok.
 
 
-do_refresh(#guiStateM_state{frame = F, bitmap = Bitmap,dc = CDC,canvas = C,nodesList = NodesList},EtsList)->
+do_refresh(#guiStateM_state{numOfProcesses = NumOfProcess, liveStats = LiveStats, frame = F, bitmap = Bitmap,dc = CDC,canvas = C,nodesList = NodesList},EtsList)->
 %%  wxDC:clear(CDC),
 %%  B = wxBitmap:new(Image),
 %%
@@ -241,6 +266,10 @@ do_refresh(#guiStateM_state{frame = F, bitmap = Bitmap,dc = CDC,canvas = C,nodes
 %%  wxMemoryDC:destroy(DC),
 %%  wxDC:clear(DC),
 %%  DC = wxMemoryDC:new(Bitmap),
+%%  integer_to_list(gen_server:call({global,node()}, {getNumberOfProcesses})
+%% moveSimulator:castPlease({numofproc,NumOfProcess}),
+
+  wxStaticText:setLabel(LiveStats, NumOfProcess),
   DC = wxWindowDC:new(C),
   wxDC:clear(DC),
 
@@ -334,3 +363,10 @@ code_change(_OldVsn, StateName, State = #guiStateM_state{}, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%Asks the MainServer how many processes we have gloabally and send to gui to display on screen
+refreshtimer(Gui)->
+  receive
+  after 1000 -> gen_statem:cast(Gui, {numOfProcesses, integer_to_list(gen_server:call({global,node()}, {getNumberOfProcesses}))})
+  end,
+  refreshtimer(Gui).

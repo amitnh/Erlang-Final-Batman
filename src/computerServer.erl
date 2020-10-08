@@ -131,8 +131,12 @@ handle_call({updateBorders, {X,Y,Dir,Vel}}, _From, State = #computerStateM_state
 
 %returns {PidTo,NodeTo} from batmans known(PidFrom)
 handle_call({getKnownFrom, PidFrom}, _From, State = #computerStateM_state{}) ->
-  {PidTo,NodeTo} = gen_server:call(PidFrom,{getKnownFrom}),
-{reply, {PidTo,NodeTo}, State};
+  try
+     {PidTo,NodeTo} = gen_server:call(PidFrom,{getKnownFrom}),
+     {reply, {PidTo,NodeTo}, State}
+    catch _:_ -> {reply, {notfound,notfound}, State}
+  end;
+
 
 handle_call(Request, _From, State = #computerStateM_state{}) ->
   castPlease({computerServerMissedCalls, Request}),
@@ -245,7 +249,11 @@ handle_cast({newRobinsAtXY,ListOfXY}, State = #computerStateM_state{}) ->
   [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self(),{X,Y,0,0}]])|| {X,Y}<- ListOfXY],
   {noreply, State#computerStateM_state{}};
 
+handle_cast({restarting}, State = #computerStateM_state{}) ->
+  {stop, normal, State};
 %%===================================================================================
+
+
 handle_cast(Request, State = #computerStateM_state{}) ->
   castPlease({missedMessegCOMPs,request,Request}),
 
@@ -268,7 +276,8 @@ handle_info(_Info, State = #computerStateM_state{}) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #computerStateM_state{}) -> term()).
 terminate(_Reason, _State = #computerStateM_state{}) ->
-  ok.
+  %when computer server terminates, he kills all robins
+  [[gen_server:stop(Pid)||Pid<-Pids]|| {_RobinX,Pids}<- ets:tab2list(etsX)],  ok.
 
 %% @private
 %% @doc Convert process state when code is changed
@@ -348,9 +357,15 @@ monitorAllRobins(MyMonitor) ->
   [([MyMonitor ! {addRobin,Pid} ||Pid<-Pids])||{_Key,Pids}<-ets:tab2list(etsX)].
 
 
-updateMainServerEts(MainServerNode)-> receive
-                                      after 1000 div ?updateMainEts -> gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY),length(processes())})
-                                      end, updateMainServerEts(MainServerNode).
+updateMainServerEts(MainServerNode)->
+  receive
+      after 1000 div ?updateMainEts ->
+          try
+            gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY),length(processes())}),
+            updateMainServerEts(MainServerNode)
+          catch _:_-> ok
+          end
+  end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

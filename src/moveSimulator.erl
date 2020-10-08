@@ -191,8 +191,11 @@ handle_call({receiveMsg,To,Msg,MoveSimFrom}, {FromPid,_Ref}, State = #moveSimula
 
 
 handle_call({getKnownFrom}, _From, State = #moveSimulator_state{}) ->
-  {PidTo,NodeTo} = gen_server:call(State#moveSimulator_state.myBatman,{getKnownFrom}),
-  {reply, {PidTo,NodeTo}, State};
+  try
+      {PidTo,NodeTo} = gen_server:call(State#moveSimulator_state.myBatman,{getKnownFrom}),
+      {reply, {PidTo,NodeTo}, State}
+    catch _:_ -> {reply, {notfound,notfound}, State}
+  end;
 
 handle_call(_Request, _From, State = #moveSimulator_state{}) ->
   castPlease({missedCallMovSim, request, _Request, from, _From}),
@@ -362,6 +365,8 @@ handle_info(_Info, State = #moveSimulator_state{}) ->
     State :: #moveSimulator_state{}) -> term()).
 
 terminate(_Reason, State = #moveSimulator_state{}) ->
+  Batman = State#moveSimulator_state.myBatman,
+  gen_server:cast(Batman,{finish}),
   X = round(State#moveSimulator_state.myX),
   Y = round(State#moveSimulator_state.myY),
   Pid = self(),
@@ -385,7 +390,9 @@ terminate(_Reason, State = #moveSimulator_state{}) ->
     if ((ObjectX == []) or (ObjectY == []))  -> ok;
       true -> terminate(_Reason, State), castPlease(terminateAgain)
     end
-    end.
+    end,
+    castPlease(okDeadMovSim),
+    ok.
 
 %% @private
 %% @doc Convert process state when code is changed

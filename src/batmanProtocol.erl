@@ -169,6 +169,8 @@ handle_cast({deleteBatman, AddressFrom}, State = #batmanProtocol_state{}) -> %ca
   Known = State#batmanProtocol_state.known,
   {noreply, State#batmanProtocol_state{known = maps:remove(AddressFrom,Known)}};
 
+handle_cast({finish}, State = #batmanProtocol_state{}) ->
+  {stop, normal, State};
 
 handle_cast(Request, State = #batmanProtocol_state{}) ->
   castPlease({missedMessegBATMAN,request,Request}),
@@ -192,6 +194,7 @@ handle_info(_Info, State = #batmanProtocol_state{}) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #batmanProtocol_state{}) -> term()).
 terminate(_Reason, _State = #batmanProtocol_state{}) ->
+  castPlease(okDeadBatman),
   ok.
 
 

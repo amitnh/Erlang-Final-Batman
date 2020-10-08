@@ -44,8 +44,8 @@
 start_link(ComputerNodes,ComputersArea) ->
     gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}],[]),% [{debug,[trace]}]). %TODO delete trace
 
-  {ok,Pid} = guiStateM:start_link([ComputerNodes,node()]),
-    spawn(fun()-> refreshtimer(Pid) end).
+  Pid= guiStateM:start_link([ComputerNodes, node()]),
+    spawn_link(fun()-> refreshtimer(Pid) end).
 % ComputerAreas-> [{startX,endX,startY,endY},...] size 4
 %%start_link(ComputerNodes,ComputerAreas) ->
 %%    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputerAreas}],[]),% [{debug,[trace]}]). %TODO delete trace
@@ -61,7 +61,7 @@ start_link(ComputerNodes,ComputersArea) ->
   {ok, State :: #mainServer_state{}} | {ok, State :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 
-init([{ComputerNodes,ComputerAreas}]) ->
+init([{ComputerNodes, ComputerAreas}]) ->
   % etsRobins: {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
   ets:new(etsRobins,[set,public,named_table]),
   ets:new(etsMsgs,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
@@ -137,7 +137,6 @@ handle_call({getNumberOfProcesses}, _From, State = #mainServer_state{}) ->
 
 handle_call(_Request, _From, State = #mainServer_state{}) ->
   moveSimulator:castPlease({missedCallmainServer, request, _Request, from, _From}),
-
   {reply, ok, State}.
 
 
@@ -242,10 +241,29 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
           {noreply, State#mainServer_state{computerNodes = [], computerAreas = []}}
   end;
 
+%user inserted new Stats :{Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}
+%Restart ComputerServers with the new Stats, also send each ComputerServer his old robins XY values
+handle_cast({newStats,Stats}, State = #mainServer_state{}) ->
+  EtsRobinsList = ets:tab2list(etsRobins),
+  Nodes = State#mainServer_state.computerNodes,
+%%  ListOfXYs = [{Node,ListofXYs},{...
+  [gen_server:cast({global,Node},{restarting})||Node<-Nodes],
+  receive
+    after 500 -> ok
+  end,
+  ComputerNodes = State#mainServer_state.computerNodes,
+  ComputerAreas = State#mainServer_state.computerAreas,
+  [spawnComputer(ComputerNodes,ComputerAreas,Node) || Node<- ComputerNodes],
+%%  [gen_server:start_link({global,Node},Stats)||Node<-Nodes],
+  moveSimulator:castPlease({newStats, Stats }),
+
+  {noreply, State};
+
 handle_cast(_Request, State = #mainServer_state{}) ->
   moveSimulator:castPlease({missedCastMainSer, request, _Request}),
 
   {noreply, State}.
+
 
 %% @private
 %% @doc Handling all non call/cast messages
@@ -297,6 +315,6 @@ newProcesses(FromNode, NumOfProcesses, ProcessesList, List)-> L = List ++ Proces
 
 refreshtimer(Gui)->
   receive
-  after ?RefreshRate -> gen_statem:cast(Gui, {refresh, ets:tab2list(etsRobins)})
+  after 1000 div ?RefreshRate -> gen_statem:cast(Gui, {refresh, ets:tab2list(etsRobins)})
   end,
   refreshtimer(Gui).
