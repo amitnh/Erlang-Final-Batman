@@ -20,7 +20,7 @@
 -define(SERVER, ?MODULE).
 
 %%%===================================================================
--record(batmanProtocol_state, {known,pid,seqNum}).
+-record(batmanProtocol_state, {known,pid,seqNum,ogmTime ,windowSize , ttl}).
 %% pid - the pid of my moveSimulator for putting it inside OGM / MSG
 %% -------------------------------------------------------
 %% known is a map of known Robins in the system
@@ -44,8 +44,8 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %% @doc Spawns the server and registers the local name (unique)
 -spec(start_link(PidMoveSimulator:: term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(PidMoveSimulator) ->
-  {ok,Pid} = gen_server:start_link(?MODULE, [PidMoveSimulator], []), %{debug,[trace]}
+start_link([PidMoveSimulator,{OGMTime,WindowSize,TTL}]) ->
+  {ok,Pid} = gen_server:start_link(?MODULE, [PidMoveSimulator,{OGMTime,WindowSize,TTL}], []), %{debug,[trace]}
   receive
   after rand:uniform(?ORIGINATOR_INTERVAL) ->  spawn_link(fun()->ogmLoop(Pid) end) % every Robins start sending OGMs after random time up to 1 interval
   end,
@@ -66,8 +66,8 @@ ogmLoop(Pid)-> % sends OGM cast to batmanProtocol to send OGM every ?ORIGINATOR_
 -spec(init(Args :: term()) ->
   {ok, State :: #batmanProtocol_state{}} | {ok, State :: #batmanProtocol_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([PidMoveSimulator]) ->
-  {ok, #batmanProtocol_state{known = maps:new(),pid = PidMoveSimulator,seqNum=0}}. %return a new empty map of known Robins
+init([PidMoveSimulator,{OGMTime,WindowSize,TTL}]) ->
+  {ok, #batmanProtocol_state{ogmTime = OGMTime,windowSize = WindowSize, ttl = TTL,known = maps:new(),pid = PidMoveSimulator,seqNum=0}}. %return a new empty map of known Robins
 
 
 %% @private
@@ -169,7 +169,7 @@ handle_cast({deleteBatman, AddressFrom}, State = #batmanProtocol_state{}) -> %ca
   Known = State#batmanProtocol_state.known,
   {noreply, State#batmanProtocol_state{known = maps:remove(AddressFrom,Known)}};
 
-handle_cast({finish}, State = #batmanProtocol_state{}) ->
+handle_cast({stopping}, State = #batmanProtocol_state{}) ->
   {stop, normal, State};
 
 handle_cast(Request, State = #batmanProtocol_state{}) ->

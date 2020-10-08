@@ -90,25 +90,25 @@ init([ComputerNodes,MainServerNode]) ->
   %Connect the Panel to paint event
   wxPanel:connect(P, paint, [callback]),
 
-  SliderRadius = wxSlider:new(P, 1, 100, 1, 3000,
+  SliderRadius = wxSlider:new(P, 1, 300, 1, 3000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  SliderNumofRobins = wxSlider:new(P, 1, 100, 1, 3000,
+  SliderNumofRobins = wxSlider:new(P, 1, 100, 1, 1000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  SliderDemiZone = wxSlider:new(P, 1, 100, 1, 3000,
+  SliderDemiZone = wxSlider:new(P, 1, 50, 0, 1000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  SliderOGMTime = wxSlider:new(P, 1, 100, 1, 3000,
+  SliderOGMTime = wxSlider:new(P, 1, 1000, 100, 5000,%in miliseconds
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  SliderMaxVelocity = wxSlider:new(P, 1, 100, 1, 3000,
+  SliderMaxVelocity = wxSlider:new(P, 1, 10, 1, 1000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  SliderWindowSize = wxSlider:new(P, 1, 100, 1, 3000,
+  SliderWindowSize = wxSlider:new(P, 1, 128, 10, 1000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  SliderTTL = wxSlider:new(P, 1, 100, 1, 3000,
+  SliderTTL = wxSlider:new(P, 1, 30, 10, 100,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
   %MaxVelocity,WindowSize,TTL
@@ -232,7 +232,7 @@ paint(cast, {sendnewStats,Env}, State = #guiStateM_state{sliders = Sliders}) ->
   WindowSize = wxSlider:getValue(SliderWindowSize),
   TTL = wxSlider:getValue(SliderTTL),
   MainServer = State#guiStateM_state.mainServer,
-  moveSimulator:castPlease({sendingsliders,{Radius,NumofRobins, DemiZone,ORIGINATOR_INTERVAL,MainServer}}),
+  moveSimulator:castPlease({sendingsliders,{Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}}),
   gen_server:cast({global,MainServer},{newStats, {{Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}}}),
   {next_state, paint, State};
 

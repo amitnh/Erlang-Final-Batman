@@ -24,7 +24,7 @@
 -define(updateMainEts, 20). % refresh rate to mainServer EtsRobins
 
 
--record(computerStateM_state, {computerNodes,computersArea, myArea,myMonitor,mainServer}).
+-record(computerStateM_state, {computerNodes,computersArea, myArea,myMonitor,mainServer,demiZone,numofRobins}).
 %%test TODO delete
 castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
@@ -34,9 +34,8 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %% @doc Spawns the server and registers the local name (unique)
 -spec(start_link(List::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link([ComputerNodes,ComputersArea,MainServerNode]) ->
-
-  {ok, Pid} =  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea,MainServerNode],[]),
+start_link([ComputerNodes,ComputersArea,Specs,MainServerNode]) ->
+  {ok, Pid} =  gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea,Specs,MainServerNode],[]),
 %% gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea,MainServerNode],[]),
   Mymonitor = spawn_link(fun()->monitorRobins(Pid) end ),%spawns a process to monitor all the move simulators.
 receive after 500-> ok end,
@@ -55,24 +54,27 @@ receive after 500-> ok end,
 -spec(init(Args :: term()) ->
   {ok, State :: #computerStateM_state{}} | {ok, State :: #computerStateM_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([ComputerNodes,ComputersArea,MainServerNode]) -> %gets the area of the computer, the borders.
+init([ComputerNodes,ComputersArea,Specs,MainServerNode]) -> %gets the area of the computer, the borders.
+  %Default values
+  {Radius,NumofRobins, DemiZone,OGMTime,MaxVelocity,WindowSize,TTL} = Specs,
+
   %the ETS is build like this: [{Location1,[pid1,pid2...]},{Location2,[pid1,pid2...]},....]
   ets:new(etsX,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   ets:new(etsY,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
   MyArea = getArea(ComputerNodes,ComputersArea,node()),
-  initRobins(MyArea),   %% spawn N/4 Robins and monitors them
+  initRobins(MyArea,{Radius,DemiZone,OGMTime,MaxVelocity,WindowSize,TTL} ),   %% spawn N/4 Robins and monitors them
 
-  {ok, #computerStateM_state{computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea,myMonitor = updatedLater ,mainServer = MainServerNode}}. %saves the area border
+  {ok, #computerStateM_state{demiZone = DemiZone,numofRobins = NumofRobins, computerNodes = ComputerNodes, computersArea = ComputersArea, myArea = MyArea,myMonitor = updatedLater ,mainServer = MainServerNode}}. %saves the area border
 
 % gets My Area from lists of nodes and areas
 getArea([],[],_)-> areaCantBeFound;
 getArea([MyNode|_],[Area|_],MyNode) -> Area;
 getArea([_|T1],[_|T2],MyNode) -> getArea(T1,T2,MyNode).
 
-initRobins(MyArea) -> %spawn N/4 Robins
+initRobins(MyArea,Specs) -> %spawn N/4 Robins
   Loop = lists:seq(1,?N div 4),
   %spawn a Robin and monitor it, we add the DemilitarizedZone, so the moveSimulator will know it
-  [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self()]])|| _<- Loop].
+  [spawn(moveSimulator,start_link,[[MyArea,Specs,self()]])|| _<- Loop].
 
 
 %% @private
@@ -249,7 +251,7 @@ handle_cast({newRobinsAtXY,ListOfXY}, State = #computerStateM_state{}) ->
   [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self(),{X,Y,0,0}]])|| {X,Y}<- ListOfXY],
   {noreply, State#computerStateM_state{}};
 
-handle_cast({restarting}, State = #computerStateM_state{}) ->
+handle_cast({stopping}, State = #computerStateM_state{}) ->
   {stop, normal, State};
 %%===================================================================================
 
@@ -277,7 +279,11 @@ handle_info(_Info, State = #computerStateM_state{}) ->
     State :: #computerStateM_state{}) -> term()).
 terminate(_Reason, _State = #computerStateM_state{}) ->
   %when computer server terminates, he kills all robins
-  [[gen_server:stop(Pid)||Pid<-Pids]|| {_RobinX,Pids}<- ets:tab2list(etsX)],  ok.
+  [[gen_server:stop(Pid)||Pid<-Pids]|| {_RobinX,Pids}<- ets:tab2list(etsX)],
+  receive
+    after 500 -> ok
+  end,
+  ok.
 
 %% @private
 %% @doc Convert process state when code is changed

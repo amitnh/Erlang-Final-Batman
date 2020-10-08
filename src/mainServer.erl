@@ -26,11 +26,12 @@
 %%-define(UpdateTime, 1000). % time for sending the ETSES tables
 -define(LineFrames, 80). %number of frames to show the line
 -define(RefreshRate, 20).
-
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputerAreas-> [{startX,endX,startY,endY},...] size 4
 % processes -> [{node,numOfProcesses},{node,numOfProcesses}...]
--record(mainServer_state, {computerNodes,computerAreas,processes}).
+% specs -> {Radius,NumofRobins, DemiZone,OGMTime,MaxVelocity,WindowSize,TTL},
+
+-record(mainServer_state, {computerNodes,computerAreas,processes,specs}).
 
 %%%===================================================================
 %%% API
@@ -42,7 +43,7 @@
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputersArea-> [{startX,endX,startY,endY},...] size 4
 start_link(ComputerNodes,ComputersArea) ->
-    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}],[]),% [{debug,[trace]}]). %TODO delete trace
+    gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[]),% [{debug,[trace]}]). %TODO delete trace
 
   Pid= guiStateM:start_link([ComputerNodes, node()]),
     spawn_link(fun()-> refreshtimer(Pid) end).
@@ -61,18 +62,18 @@ start_link(ComputerNodes,ComputersArea) ->
   {ok, State :: #mainServer_state{}} | {ok, State :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 
-init([{ComputerNodes, ComputerAreas}]) ->
+init([ComputerNodes, ComputerAreas]) ->
   % etsRobins: {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
   ets:new(etsRobins,[set,public,named_table]),
   ets:new(etsMsgs,[ordered_set,public,named_table,{read_concurrency, true},{write_concurrency, true}]),
 
-%%  lists:zipwith(fun(Atom,Node) -> put(Atom,Node) end, [c1,c2,c3,c4], ComputerNodes), % saves the Nodes of the computers todo
-%%  lists:zipwith(fun(Atom,Area) -> put(Atom,Area) end, [area1,area2,area3,area4], ComputerAreas), % saves the Nodes area todo
   spawn_link(fun()->monitorComputers(ComputerNodes,node()) end),
-  spawnComputer(ComputerNodes,ComputerAreas,loop),
+  % specs -> {Radius,NumofRobins, DemiZone,OGMTime,MaxVelocity,WindowSize,TTL},
+  %start with default values
+  spawnComputer(ComputerNodes,ComputerAreas, {300,100, 50,1000,10,128,30},loop),
   spawn_link(fun()->testMsgSending() end),
 
-  {ok, #mainServer_state{processes = [], computerNodes = ComputerNodes,computerAreas = ComputerAreas}}.
+  {ok, #mainServer_state{processes = [], computerNodes = ComputerNodes,computerAreas = ComputerAreas, specs = {300,100, 50,1000,10,128,30}}}.
 testMsgSending()->
 
   receive after 4000  ->
@@ -97,11 +98,12 @@ takeNelement(X,_Xlast, N) ->
 %a process updateMainServer sends every UpdateTime mili secs the ETS tables to the main server
 
 %start server for computer for each node in the ComputerNodes list
-spawnComputer(ComputerNodes,ComputerAreas,loop) -> [spawnComputer(ComputerNodes,ComputerAreas,Node) || Node<- ComputerNodes];
+spawnComputer(ComputerNodes,ComputerAreas,Specs,loop) -> [spawnComputer(ComputerNodes,ComputerAreas,Specs,Node) || Node<- ComputerNodes];
 % spawns a Computer at a specific node and monitors it
-spawnComputer(ComputerNodes,ComputerAreas,Node) ->
+spawnComputer(ComputerNodes,ComputerAreas,Specs,Node) ->
 
-  spawn(Node,computerServer,start_link,[[ComputerNodes,ComputerAreas,node()]]).
+% specs -> {Radius,NumofRobins, DemiZone,OGMTime,MaxVelocity,WindowSize,TTL},
+  spawn(Node,computerServer,start_link,[[ComputerNodes,ComputerAreas, Specs,node()]]).
 
 %%==================================================================================
 %%monitors all computer Servers(move simulators)
@@ -243,19 +245,19 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
 
 %user inserted new Stats :{Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}
 %Restart ComputerServers with the new Stats, also send each ComputerServer his old robins XY values
-handle_cast({newStats,Stats}, State = #mainServer_state{}) ->
-  EtsRobinsList = ets:tab2list(etsRobins),
+handle_cast({newStats,NewSpecs}, State = #mainServer_state{}) ->
   Nodes = State#mainServer_state.computerNodes,
-%%  ListOfXYs = [{Node,ListofXYs},{...
-  [gen_server:cast({global,Node},{restarting})||Node<-Nodes],
+  [gen_server:stop({global,Node})||Node<-Nodes],
+
+%%  [gen_server:cast({global,Node},{stopping})||Node<-Nodes],
   receive
     after 500 -> ok
   end,
   ComputerNodes = State#mainServer_state.computerNodes,
   ComputerAreas = State#mainServer_state.computerAreas,
-  [spawnComputer(ComputerNodes,ComputerAreas,Node) || Node<- ComputerNodes],
-%%  [gen_server:start_link({global,Node},Stats)||Node<-Nodes],
-  moveSimulator:castPlease({newStats, Stats }),
+  spawnComputer(ComputerNodes,ComputerAreas, NewSpecs,loop),
+
+  moveSimulator:castPlease({newStats, NewSpecs }),
 
   {noreply, State};
 
