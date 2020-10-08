@@ -23,10 +23,13 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(UpdateTime, 1000). % time for sending the ETSES tables
+%%-define(UpdateTime, 1000). % time for sending the ETSES tables
 -define(LineFrames, 80). %number of frames to show the line
 
--record(mainServer_state, {computerNodes,computerAreas}).
+% ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
+% ComputerAreas-> [{startX,endX,startY,endY},...] size 4
+% processes -> [{node,numOfProcesses},{node,numOfProcesses}...]
+-record(mainServer_state, {computerNodes,computerAreas,processes}).
 
 %%%===================================================================
 %%% API
@@ -118,6 +121,13 @@ monitorComputersReceieveLoop(MainServerNode)->
   {noreply, NewState :: #mainServer_state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #mainServer_state{}} |
   {stop, Reason :: term(), NewState :: #mainServer_state{}}).
+
+%retunrs the sum of all  processes in my node + all other nodes
+handle_call({getNumberOfProcesses}, _From, State = #mainServer_state{}) ->
+  Processes = State#mainServer_state.processes,
+  NumOfProcesses = lists:sum([Num||{_Node,Num}<-Processes]) + length(processes()),
+  {reply, NumOfProcesses, State}.
+
 handle_call(_Request, _From, State = #mainServer_state{}) ->
   moveSimulator:castPlease({missedCallmainServer, request, _Request, from, _From}),
 
@@ -154,10 +164,11 @@ handle_cast({test,M}, State = #mainServer_state{}) ->
   {noreply, State};
 %regular ETS update from Node
 %EtsX and EtsY are lists of the original ETSes
-handle_cast({etsUpdate,From,EtsX,EtsY}, State = #mainServer_state{}) ->
-  spawn(fun()-> [updateEts(X,PidList,x,From)||{X,PidList}<-EtsX],
-    [updateEts(Y,PidList,y,From)||{Y,PidList}<-EtsY] end),
-  {noreply, State};
+handle_cast({etsUpdate,FromNode,EtsX,EtsY,NumOfProcesses}, State = #mainServer_state{}) ->
+  spawn(fun()-> [updateEts(X,PidList,x,FromNode)||{X,PidList}<-EtsX],
+                [updateEts(Y,PidList,y,FromNode)||{Y,PidList}<-EtsY] end),
+  NewProcesses = newProcesses(FromNode,NumOfProcesses,State#mainServer_state.processes,[]),
+  {noreply, State#mainServer_state{processes = NewProcesses}};
 
 %Removes a Robin from the ETSRobins
 handle_cast({removeRobin,Pid,Node}, State = #mainServer_state{}) ->
@@ -269,3 +280,9 @@ newComputerAreas([],_DeadArea, _ChosenOldArea, _ChosenNewArea,List) ->List;
 newComputerAreas([DeadArea|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,List);
 newComputerAreas([ChosenOldArea|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea, List ++ [ChosenNewArea]);
 newComputerAreas([H|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,List ++ [H]).
+
+%returns a list with the updated Processes
+newProcesses(FromNode, NumOfProcesses, [{FromNode,_OldProcesses}|T], List)-> List ++ [{FromNode, NumOfProcesses}] ++ T; % update node
+newProcesses(FromNode, NumOfProcesses, [H|T], List)-> newProcesses(FromNode, NumOfProcesses, T, List ++ H); % keep searching in the list
+newProcesses(FromNode, NumOfProcesses, ProcessesList, List)-> List ++ ProcessesList ++ [{FromNode, NumOfProcesses}]. %case a new Node
+

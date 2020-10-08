@@ -349,7 +349,7 @@ monitorAllRobins(MyMonitor) ->
 
 
 updateMainServerEts(MainServerNode)-> receive
-                                      after 1000 div ?updateMainEts -> gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)})
+                                      after 1000 div ?updateMainEts -> gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY),length(processes())})
                                       end, updateMainServerEts(MainServerNode).
 
 
