@@ -55,22 +55,28 @@ start_link([Area,Specs,PCPid,{X,Y,Dir,Vel}]) ->
 %send a cast to update the main ets's every ?updateEts milisecounds
 etsTimer(Pid)->TimeToWait = 1000 div ?updateEts, %time to wait for sending  ?updateEts msgs in 1 sec
             receive
-              after TimeToWait -> gen_server:cast(Pid,{updateEts})
-            end,
-            etsTimer(Pid).
+              _->ok
+              after TimeToWait ->
+              gen_server:cast(Pid,{updateEts}),
+              etsTimer(Pid)
+            end.
+
 %update the random velocity,direction and updatetime to update
 vectorTimer(Pid)->
+
+  {Min,Max} = ?timeRange,
+  TimeToWait = Min + rand:uniform(Max-Min),
+
+  receive
+    _->ok
+    after TimeToWait ->
   %this 3 are going to the vector (in the record):
   CurrTime = erlang:system_time(millisecond),
   Velocity = rand:uniform(?velMax*1000)/1000,
   Direction = rand:uniform(360), % in degrees
+  gen_server:cast(Pid,{updateMovementVector,CurrTime,Velocity,Direction}),vectorTimer(Pid)
 
-  {Min,Max} = ?timeRange,
-  TimeToWait = Min + rand:uniform(Max-Min),
-  gen_server:cast(Pid,{updateMovementVector,CurrTime,Velocity,Direction}),
-  receive
-    after TimeToWait -> ok
-  end, vectorTimer(Pid).
+  end .
 
 %%%===================================================================
 %%% gen_server callbacks
