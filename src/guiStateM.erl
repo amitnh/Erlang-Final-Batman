@@ -18,19 +18,23 @@
 -export([init/1, format_status/2, state_name/3, handle_event/4, terminate/3,
   code_change/4, callback_mode/0, waiting/3, paint/3]).
 -include_lib("wx/include/wx.hrl").
--define(Height, 1000).
--define(Width, 1000).
+-define(Height, 500).
+-define(Width, 500).
 -define(Green,?wxGREEN ).
--define(RefreshRate, 20).
+-define(RefreshRate, 5).
 -define(SERVER, ?MODULE).
 -record(guiStateM_state,
 {
+  mainServer,
   frame,
   env,
   panel,
   text,
   canvas,
-  nodesList  %#[{Node,Color} , {node, Color },,,]
+  nodesList,  %#[{Node,Color} , {node, Color },,,]
+  bitmap,
+  dc,
+  sliders
 }).
 %%-record(guiStateM_state, {}).
 
@@ -41,8 +45,8 @@
 %% @doc Creates a gen_statem process which calls Module:init/1 to
 %% initialize. To ensure a synchronized start-up procedure, this
 %% function does not return until Module:init/1 has returned.
-start_link(ComputerNodes) ->
-  gen_statem:start_link({global, ?SERVER}, ?MODULE, [ComputerNodes], []).
+start_link([ComputerNodes,MainServerNode]) ->
+  gen_statem:start_link({global, ?SERVER}, ?MODULE, [ComputerNodes,MainServerNode], []).
 
 %%%===================================================================
 %%% gen_statem callbacks
@@ -52,29 +56,57 @@ start_link(ComputerNodes) ->
 %% @doc Whenever a gen_statem is started using gen_statem:start/[3,4] or
 %% gen_statem:start_link/[3,4], this function is called by the new
 %% process to initialize.
-init([ComputerNodes]) ->
+init([ComputerNodes,MainServerNode]) ->
   % {Pid,Node} -> {X,Y}, {{<0.112.0>,tal@ubuntu},X,Y}
 %%  ets:new(etsRobins,[set,public,named_table]),
 %%  ets:insert(etsRobins, [{pid1,{200,60}}, {pid2,{300,20}}, {pid3,{500,1000}}, {pid4,{40,800}}]),
   Length = length(ComputerNodes),
   Seq = lists:seq(1,Length),
-  Env = wx:new(),     %%create a wx environment
+  Env = wx:new(),     %%create a wx
+  wx_object:start(?MODULE, [Env], []),
   NodesList = [{lists:nth(N,ComputerNodes),lists:nth(N,[?wxGREEN,?wxBLUE,?wxRED,?wxCYAN])}||N<-Seq],
 
-  F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width+100,?Height}}]),  %Creates the main frame for the gui
+  F = wxFrame:new(wx:null(), -1, "B.A.T.M.A.N Display", [{size, {?Width+300,?Height+400}}]),  %Creates the main frame for the gui
   P = wxPanel:new(F, [{size, {?Width,?Height-100}}]), % a panel we will split with sizers
-  C = wxPanel:new(P, [{style, ?wxFULL_REPAINT_ON_RESIZE},{size, {?Width,?Height-100}}]), %the main canvas to print on the points
+  C = wxPanel:new(P, [{style, ?wxFULL_REPAINT_ON_RESIZE},{size, {?Height,?Width-100}}]), %the main canvas to print on the points
+
+
   MainSizer = wxBoxSizer:new(?wxVERTICAL),      %main sizer for alignment within the panel
   Sizer = wxStaticBoxSizer:new(?wxVERTICAL, P, [{label, "Batman bounderies"}]), %inside frame for batman protocol display
   T = wxStaticText:new(P, -1, "Click to start",[]),
 
   %create a botton to initiate batman protocol and connect it to its event handler
   B = wxButton:new(P, 0, [{label, "Start"}, {size, {150, 50}}]),
+  Bapply = wxButton:new(P, 1, [{label, "Apply"}, {size, {150, 50}}]),
   State = #guiStateM_state{canvas = C,text = T, env = Env},
   wxButton:connect(B, command_button_clicked, [{callback, fun handle_click/2}, {userData, #{canvas => C,text => T, env => wx:get_env()}}]),
+  wxButton:connect(Bapply, command_button_clicked, [{callback, fun handle_click/2}, {userData, #{canvas => C,text => T, env => wx:get_env()}}]),
   %Connect the Panel to paint event
   wxPanel:connect(P, paint, [callback]),
+
+  SliderRadius = wxSlider:new(P, 1, 100, 1, 3000,
+    [{style, ?wxSL_HORIZONTAL bor
+      ?wxSL_LABELS}]),
+  SliderNumofRobins = wxSlider:new(P, 1, 100, 1, 3000,
+    [{style, ?wxSL_HORIZONTAL bor
+      ?wxSL_LABELS}]),
+  SliderDemiZone = wxSlider:new(P, 1, 100, 1, 3000,
+    [{style, ?wxSL_HORIZONTAL bor
+      ?wxSL_LABELS}]),
+  SliderOGMTime = wxSlider:new(P, 1, 100, 1, 3000,
+    [{style, ?wxSL_HORIZONTAL bor
+      ?wxSL_LABELS}]),
+  Sliders = {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime},
+  Sizer2 = wxBoxSizer:new(?wxHORIZONTAL),
   wxSizer:add(Sizer, B, [{border, 5}, {flag, ?wxALL}]),
+  wxSizer:add(Sizer, Sizer2, [{proportion, 0}, {flag, ?wxEXPAND}]),
+
+
+  wxSizer:add(Sizer, SliderRadius, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer, SliderNumofRobins, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer, SliderDemiZone, [{flag, ?wxEXPAND}]),
+  wxSizer:add(Sizer, SliderOGMTime, [{flag, ?wxEXPAND}]),
+
   wxSizer:addSpacer(Sizer, 5),
   wxSizer:add(Sizer, T, [{border, 5}, {flag, ?wxALL}]),
   wxSizer:addSpacer(Sizer, 5),
@@ -82,20 +114,33 @@ init([ComputerNodes]) ->
   wxSizer:add(MainSizer, Sizer, [{flag, ?wxEXPAND}, {proportion, 1}]),
   wxPanel:setSizer(P, MainSizer),
   wxSizer:layout(MainSizer),
-
   %Frame is ready for display
-  DC = wxPaintDC:new(C),
+  DC = wxClientDC:new(C),
 
-  wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
-  wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
-  wxDC:clear(DC),
+  ClientDC = wxClientDC:new(C),
+  Bitmap = wxBitmap:new(?Width,?Width),
+%%  wxWindow:refresh(C),
+
+
+%%  B = wxBitmap:new(wxImage:scale(Image,450,450)),
+
+
+
+
+%%  DC = wxClientDC:new(P),
+%%  Bitmap = wxBitmap:new(?Width,?Height),
+
+%%  wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
+%%  wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
+%%  wxDC:clear(DC),
 %%  wxDC:drawRectangle(DC,{0,0},{1000,1000}),
 %%  wxDC:drawLine(DC,{500,0},{500,1000}),
 %%  wxDC:drawLine(DC,{0,500},{1000,500}),
-  wxPaintDC:destroy(DC),
+%%  wxPaintDC:destroy(DC),
 %%  initcanvas(C),
   wxFrame:show(F),
-  {ok, waiting, #guiStateM_state{env = Env, canvas = C,frame = F,panel = P,text = T, nodesList = NodesList }}.
+  {ok, waiting, #guiStateM_state{mainServer = MainServerNode, env = Env, canvas = C,frame = F,panel = P,
+        text = T,dc = ClientDC, bitmap = Bitmap, nodesList = NodesList, sliders = Sliders}}.
 
 
 
@@ -135,49 +180,87 @@ state_name(star, _EventContent, State = #guiStateM_state{}) ->
   {next_state, NextStateName, State}.
 
 waiting(cast,paintnow,State = #guiStateM_state{}) ->
-  spawn(fun()-> timer() end),
+%%  spawn(fun()-> timer() end),
+  {next_state, paint, State};
+
+waiting(cast, {sendnewStats,Env},State = #guiStateM_state{}) ->
+%%  spawn(fun()-> timer() end),
+  %Todo send stats
   {next_state, paint, State};
 
 waiting(cast, _, State = #guiStateM_state{}) ->
   {next_state, waiting, State}.
 
-paint(cast,refresh,State = #guiStateM_state{canvas = C}) ->
+%paint all ETSrobin on the screen and update the spec lable
+paint(cast, {refresh,ETS}, State = #guiStateM_state{}) ->
+  do_refresh(State,ETS),
+  {next_state, paint, State};
 
-  do_refresh(C, State#guiStateM_state.nodesList),
+%Sliders = {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime},
+%send to mainServer the new stats the user inserted in sliders
+paint(cast, {sendnewStats,Env}, State = #guiStateM_state{sliders = Sliders}) ->
+
+  wx:set_env(Env),
+  {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime} = Sliders,
+  Radius = wxSlider:getValue(SliderRadius),
+  NumofRobins = wxSlider:getValue(SliderNumofRobins),
+  DemiZone = wxSlider:getValue(SliderDemiZone),
+  OGMTime = wxSlider:getValue(SliderOGMTime),
+  MainServer = State#guiStateM_state.mainServer,
+  moveSimulator:castPlease({sendingsliders,{Radius,NumofRobins, DemiZone,OGMTime,MainServer}}),
+  gen_server:cast({global,MainServer},{newStats,Radius,NumofRobins,DemiZone,OGMTime}),
   {next_state, paint, State};
 
 paint(cast, _, State = #guiStateM_state{}) ->
   {next_state, paint, State}.
 
-handle_click(#wx{obj = _, userData = #{text := T, env := Env}},_Event) ->
+handle_click(#wx{obj = Obj, userData = #{text := T, env := Env}},_Event) ->
   wx:set_env(Env),
   wxStaticText:setLabel(T, "Running.."),
-  gen_statem:cast({global, ?SERVER}, paintnow).
+  Label = wxButton:getLabel(Obj),
+  if (Label == "Start") ->moveSimulator:castPlease({starting,Label}),
+              gen_statem:cast({global, ?SERVER}, paintnow);
+    true ->   moveSimulator:castPlease({applying,Label}), gen_statem:cast({global, ?SERVER}, {sendnewStats,Env})
+  end.
 
-timer()->
-  receive
-    after ?RefreshRate -> gen_statem:cast({global, ?SERVER}, refresh)
-  end,
-  timer().
+handle_sync_event(#wx{event=#wxErase{}}, _, _) -> ok.
 
-do_refresh(C,NodesList)->
-  moveSimulator:castPlease({etsRobins,ets:tab2list(etsRobins)}),
 
-  EtsList = ets:tab2list(etsRobins),
-  DC = wxPaintDC:new(C),
+do_refresh(#guiStateM_state{frame = F, bitmap = Bitmap,dc = CDC,canvas = C,nodesList = NodesList},EtsList)->
+%%  wxDC:clear(CDC),
+%%  B = wxBitmap:new(Image),
+%%
+%%  DC = wxClientDC:new(B),
+%%  Bitmap = wxBitmap:new(Image),
+
+%%  moveSimulator:castPlease({etsRobins,ets:tab2list(etsRobins)}),
+
+%%  CDC = State#guiStateM_state.dc,
+%%  CDC = wxWindowDC:new(C),
+%%  EtsList = ets:tab2list(etsRobins),
+%%  wxMemoryDC:destroy(DC),
+%%  wxDC:clear(DC),
+%%  DC = wxMemoryDC:new(Bitmap),
+  DC = wxWindowDC:new(C),
+  wxDC:clear(DC),
+
 
   wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
   wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
-  wxDC:clear(DC),
-  wxDC:drawRectangle(DC,{0,0},{1000,1000}),
-  wxDC:drawLine(DC,{500,0},{500,1000}),
-  wxDC:drawLine(DC,{0,500},{1000,500}),
+  wxDC:drawRectangle(DC,{0,0},{?Width,?Width}),
+  wxDC:drawLine(DC,{?Width div 2,0},{?Width div 2,?Width}),
+  wxDC:drawLine(DC,{0,?Width div 2},{?Width,?Width div 2}),
   wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),
   [ paintCirclesinColors(DC,NodesList,Node,X,Y) || {{_Pid,Node},{X,Y}}<- EtsList],
   wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),
   [wxDC:drawLine(DC,XYFrom,XYTo)||{XYFrom,XYTo}<-getMsgPids()],
-  wxPaintDC:destroy(DC).
+  wxDC:blit(CDC, {0,0},{?Width,?Width},DC, {0,0}),
+  wxWindowDC:destroy(DC),
+  wxWindow:show(F).
 
+
+
+%%
 getMsgPids() ->getMsgPids([],ets:first(etsMsgs)).
 getMsgPids(L,'$end_of_table') ->L;%end  return List Of XYFrom, XYTo
 %For each msg in etsMsgs, take the timer down by one and if its 0 delete the msg
@@ -193,12 +276,10 @@ getMsgPids(XYRobinsLocations,{From,To}) ->
     true ->
       [{{_Pid,_Node}, {XFrom,YFrom}}] = ets:lookup(etsRobins,From),
       [{{_Pid2,_Node2}, {XTo,YTo}}] = ets:lookup(etsRobins,To),
-%%      ets:insert(etsMsgs,{{From,To},Timer-1}),
         ets:delete(etsMsgs,Key),
         ets:insert(etsMsgs,{Key,(Timer-1)}),
-%%      Bool = ets:update_element(etsMsgs,Key, {1,(Timer - 1)}),
 
-      getMsgPids(XYRobinsLocations++[{{XFrom div 2,YFrom div 2},{XTo div 2,YTo div 2}}],Next)
+      getMsgPids(XYRobinsLocations++[{{XFrom,YFrom},{XTo,YTo}}],Next)
       end
   catch
     _:_->
@@ -207,7 +288,7 @@ getMsgPids(XYRobinsLocations,{From,To}) ->
   end.
 
 paintCirclesinColors(DC,NodesList,Node,X,Y) ->%Set a different color for each node.
-  wxDC:setPen(DC, wxPen:new(getColor(Node,NodesList), [{width, 2}])) ,wxDC:drawCircle(DC, {X div 2,Y div 2}, 3).
+  wxDC:setPen(DC, wxPen:new(getColor(Node,NodesList), [{width, 2}])) ,wxDC:drawCircle(DC, {X,Y}, 3).
 
 getColor(Node,[{Node,Color}|_])->Color;
 getColor(Node,[_|NodesList])->getColor(Node,NodesList).
@@ -227,7 +308,6 @@ getColor(Node,[_|NodesList])->getColor(Node,NodesList).
 %%%%  wxDC:clear(DC),
 %%%%  wxBitmap:destroy(Bmp),
 %%%%  wxPaintDC:destroy(DC).
-
 
 
 %% @private

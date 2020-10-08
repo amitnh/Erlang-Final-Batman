@@ -25,6 +25,7 @@
 -define(SERVER, ?MODULE).
 %%-define(UpdateTime, 1000). % time for sending the ETSES tables
 -define(LineFrames, 80). %number of frames to show the line
+-define(RefreshRate, 20).
 
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputerAreas-> [{startX,endX,startY,endY},...] size 4
@@ -39,10 +40,16 @@
 -spec(start_link(ComputerNodes::list(),ComputerAreas::list()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
+% ComputersArea-> [{startX,endX,startY,endY},...] size 4
+start_link(ComputerNodes,ComputersArea) ->
+    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputersArea}],[]),% [{debug,[trace]}]). %TODO delete trace
+
+  {ok,Pid} = guiStateM:start_link([ComputerNodes,node()]),
+    spawn(fun()-> refreshtimer(Pid) end).
 % ComputerAreas-> [{startX,endX,startY,endY},...] size 4
-start_link(ComputerNodes,ComputerAreas) ->
-    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputerAreas}],[]),% [{debug,[trace]}]). %TODO delete trace
-    guiStateM:start_link(ComputerNodes).
+%%start_link(ComputerNodes,ComputerAreas) ->
+%%    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputerAreas}],[]),% [{debug,[trace]}]). %TODO delete trace
+%%    guiStateM:start_link(ComputerNodes).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -65,7 +72,7 @@ init([{ComputerNodes,ComputerAreas}]) ->
   spawnComputer(ComputerNodes,ComputerAreas,loop),
   spawn_link(fun()->testMsgSending() end),
 
-  {ok, #mainServer_state{computerNodes = ComputerNodes,computerAreas = ComputerAreas}}.
+  {ok, #mainServer_state{processes = [], computerNodes = ComputerNodes,computerAreas = ComputerAreas}}.
 testMsgSending()->
 
   receive after 4000  ->
@@ -126,7 +133,7 @@ monitorComputersReceieveLoop(MainServerNode)->
 handle_call({getNumberOfProcesses}, _From, State = #mainServer_state{}) ->
   Processes = State#mainServer_state.processes,
   NumOfProcesses = lists:sum([Num||{_Node,Num}<-Processes]) + length(processes()),
-  {reply, NumOfProcesses, State}.
+  {reply, NumOfProcesses, State};
 
 handle_call(_Request, _From, State = #mainServer_state{}) ->
   moveSimulator:castPlease({missedCallmainServer, request, _Request, from, _From}),
@@ -139,7 +146,8 @@ handle_call(_Request, _From, State = #mainServer_state{}) ->
 
 %takes a list of pids from ETSX or ETSY, and updates their location in the ETSROBINS
 updateEts(_,[],_,_)-> ok;
-updateEts(Location,[Pid|Pids],XorY,Node)-> IsMember = ets:member(etsRobins,{Pid,Node}),
+updateEts(OriginLocation,[Pid|Pids],XorY,Node)-> Location =OriginLocation div 4,
+  IsMember = ets:member(etsRobins,{Pid,Node}),
   if  IsMember -> [{_FromTuple,{X,Y}}] = ets:lookup(etsRobins,{Pid,Node}), %if Robins already a member
       if XorY == x -> ets:insert(etsRobins,{{Pid,Node},{Location,Y}});
         true -> ets:insert(etsRobins,{{Pid,Node},{X,Location}})
@@ -235,7 +243,7 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
   end;
 
 handle_cast(_Request, State = #mainServer_state{}) ->
-  moveSimulator:castPlease({missedCallMainSer, request, _Request}),
+  moveSimulator:castPlease({missedCastMainSer, request, _Request}),
 
   {noreply, State}.
 
@@ -283,6 +291,12 @@ newComputerAreas([H|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newCompute
 
 %returns a list with the updated Processes
 newProcesses(FromNode, NumOfProcesses, [{FromNode,_OldProcesses}|T], List)-> List ++ [{FromNode, NumOfProcesses}] ++ T; % update node
-newProcesses(FromNode, NumOfProcesses, [H|T], List)-> newProcesses(FromNode, NumOfProcesses, T, List ++ H); % keep searching in the list
-newProcesses(FromNode, NumOfProcesses, ProcessesList, List)-> List ++ ProcessesList ++ [{FromNode, NumOfProcesses}]. %case a new Node
+newProcesses(FromNode, NumOfProcesses, [H|T], List)-> newProcesses(FromNode, NumOfProcesses, T, List ++ [H]); % keep searching in the list
+newProcesses(FromNode, NumOfProcesses, ProcessesList, List)-> L = List ++ ProcessesList, L ++ [{FromNode, NumOfProcesses}]. %case a new Node
 
+
+refreshtimer(Gui)->
+  receive
+  after ?RefreshRate -> gen_statem:cast(Gui, {refresh, ets:tab2list(etsRobins)})
+  end,
+  refreshtimer(Gui).
