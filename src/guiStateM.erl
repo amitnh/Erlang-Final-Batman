@@ -100,7 +100,7 @@ init([ComputerNodes,MainServerNode]) ->
   SliderRadius = wxSlider:new(P, 1, 300, 1, 3000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  SliderNumofRobins = wxSlider:new(P, 1, 100, 4, 1000,
+  SliderNumofRobins = wxSlider:new(P, 1, 100, 4, 200,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
   SliderDemiZone = wxSlider:new(P, 1, 50, 0, 1000,
@@ -306,9 +306,9 @@ do_refresh(#guiStateM_state{numOfProcesses = NumOfProcess, liveStats = LiveStats
   wxDC:drawLine(DC,{?Width div 2,0},{?Width div 2,?Width}),
   wxDC:drawLine(DC,{0,?Width div 2},{?Width,?Width div 2}),
   wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),
-  [ paintCirclesinColors(DC,NodesList,Node,X,Y) || {{_Pid,Node},{X,Y}}<- EtsList],
+  [ paintCirclesinColors(DC,NodesList,Node,X div 4,Y div 4 ) || {{_Pid,Node},{X,Y}}<- EtsList],
   wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),
-  [wxDC:drawLine(DC,XYFrom,XYTo)||{XYFrom,XYTo}<-getMsgPids()],
+  [wxDC:drawLine(DC,{XFrom div 4,YFrom div 4}, {XTo div 4,YTo div 4})||{{XFrom,YFrom}, {XTo,YTo}}<-getMsgPids()],
   wxBufferedPaintDC:destroy(DC),
   wxWindow:show(F).
 

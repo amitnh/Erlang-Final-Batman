@@ -237,7 +237,7 @@ handle_cast({removeRobin,Pid}, State = #computerStateM_state{}) ->
   {noreply, State};
 
 handle_cast({msgSent,From,To}, State = #computerStateM_state{}) ->
-  castPlease({sending,from,From,to,To}),
+%%  castPlease({sending,from,From,to,To}),
   gen_server:cast({global, State#computerStateM_state.mainServer},{addMessage, From,To}),
 {noreply, State};
 
@@ -245,9 +245,9 @@ handle_cast({msgSent,From,To}, State = #computerStateM_state{}) ->
 %Robin crashed so we generate a new one
 handle_cast({generateRobin}, State = #computerStateM_state{}) ->
   MyArea = State#computerStateM_state.myArea,
-  {_Radius,_NumofRobins, DemiZone,_OGMTime,_MaxVelocity,_WindowSize,_TTL} = State#computerStateM_state.specs,
+  Specs = State#computerStateM_state.specs,
 
-  spawn(moveSimulator,start_link,[[MyArea,DemiZone,self()]]),
+  spawn(moveSimulator,start_link,[[MyArea,Specs,self()]]),
   {noreply, State};
 
 %someone died, update Boarders, if my boarder updated change it too
@@ -258,10 +258,10 @@ handle_cast({newBoarders,NewComputerNodes,NewComputerAreas}, State = #computerSt
 %(someone died) spawn new Robins at each {X,Y} from ListOfXY
 handle_cast({newRobinsAtXY,ListOfXY}, State = #computerStateM_state{}) ->
   MyArea = State#computerStateM_state.myArea,
-  {_Radius,_NumofRobins, DemiZone,_OGMTime,_MaxVelocity,_WindowSize,_TTL} = State#computerStateM_state.specs,
+  Specs = State#computerStateM_state.specs,
 
   castPlease({newRobinsAtXY,node,node(),area,MyArea}),
-  [spawn(moveSimulator,start_link,[[MyArea,DemiZone,self(),{X,Y,0,0}]])|| {X,Y}<- ListOfXY],
+  [spawn(moveSimulator,start_link,[[MyArea,Specs,self(),{X,Y,0,0}]])|| {X,Y}<- ListOfXY],
   {noreply, State#computerStateM_state{}};
 
 handle_cast({stopping}, State = #computerStateM_state{}) ->
@@ -403,6 +403,6 @@ monitorRobins(MyComputerServer) ->
       gen_server:cast(MyComputerServer,{removeRobin, Pid}),
       gen_server:cast(MyComputerServer,{generateRobin});
 
-    SomeError ->   castPlease({zeze,SomeError})
+    SomeError ->   castPlease({someError,SomeError})
   end,
   monitorRobins(MyComputerServer).

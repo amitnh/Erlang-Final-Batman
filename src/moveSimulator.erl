@@ -189,7 +189,7 @@ updatedXYlocations(State)->
   {stop, Reason :: term(), NewState :: #moveSimulator_state{}}).
 
 handle_call({receiveMsg,To,Msg,MoveSimFrom}, {FromPid,_Ref}, State = #moveSimulator_state{}) ->
-  castPlease({receiveMsg,from,FromPid}),
+%%  castPlease({receiveMsg,from,FromPid}),
   gen_server:cast(State#moveSimulator_state.pcPid,{msgSent, MoveSimFrom, {self(),node()}}),
   if (To == {self(),node()}) -> castPlease(Msg); % case the msg is for me -> cast it
     true-> gen_server:cast(self(),{sendMsg,To, {FromPid,node()},Msg}) % case the msg is not for me -> pass it on
@@ -232,10 +232,10 @@ handle_cast({tokillonshutdown,OGMPids}, State = #moveSimulator_state{}) -> %case
   {noreply, State#moveSimulator_state{tokill = OGMPids}};
 
 handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
-  castPlease({firstSendMsgMoveSimulator,to,To,from,From,msg,Msg}),
+%%  castPlease({firstSendMsgMoveSimulator,to,To,from,From,msg,Msg}),
   MyBatman = State#moveSimulator_state.myBatman,
   BestLink  = gen_server:call(MyBatman, {findBestLink, To}),
-  castPlease({bestLink,BestLink}),
+%%  castPlease({bestLink,BestLink}),
   if is_tuple(BestLink) -> % there where no problems, Best Link was found
     {BestLinkPid,BestLinkNode}= BestLink,
     Node = node(),
@@ -395,7 +395,7 @@ terminate(_Reason, State = #moveSimulator_state{}) ->
     ObjectX = ets:lookup(etsX,X),
     ObjectY= ets:lookup(etsY,Y),
 
-    if ((ObjectX == []) or (ObjectY == []))  -> castPlease({ok2}),ok;
+    if ((ObjectX == []) or (ObjectY == []))  -> ok;
     true->
         [{_, TempX}] = ObjectX,
         [{_, TempY}] = ObjectY,
@@ -407,15 +407,13 @@ terminate(_Reason, State = #moveSimulator_state{}) ->
         if (length(ListY)>0) ->ets:insert(etsY,[{Y,ListY}]);
           true->  ets:delete(etsY,Y)
         end,
-      castPlease({ok3}),
       ObjectXcheck = ets:lookup(etsX,X),
       ObjectYcheck= ets:lookup(etsY,Y),
       if ((ObjectXcheck == []) or (ObjectYcheck == []))  -> ok;
         true -> terminate(_Reason, State), castPlease(terminateAgain)
       end
       end,
-      castPlease(gen_server:cast(Batman,stop)),
-      castPlease(okDeadMovSim)
+      gen_server:cast(Batman,stop)
       catch _:M -> castPlease({movSimTerminate,catchError,M})
       end
       end,

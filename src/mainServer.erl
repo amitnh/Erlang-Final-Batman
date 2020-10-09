@@ -76,7 +76,7 @@ init([ComputerNodes, ComputerAreas]) ->
   {ok, #mainServer_state{processes = [], computerNodes = ComputerNodes,computerAreas = ComputerAreas, specs = {300,100, 50,1000,10,128,30}}}.
 testMsgSending()->
  try
-  receive after 4000  ->
+  receive after 2000  ->
   First = ets:first(etsRobins),
     {PidFrom,NodeFrom} = takeNelement(First,First,rand:uniform(20)),
 
@@ -155,7 +155,7 @@ deleteallETS(Todelete) ->
 
 %takes a list of pids from ETSX or ETSY, and updates their location in the ETSROBINS
 updateEts(_,[],_,_)-> ok;
-updateEts(OriginLocation,[Pid|Pids],XorY,Node)-> Location =OriginLocation div 4,
+updateEts(OriginLocation,[Pid|Pids],XorY,Node)-> Location =OriginLocation ,
   IsMember = ets:member(etsRobins,{Pid,Node}),
   if  IsMember -> [{_FromTuple,{X,Y}}] = ets:lookup(etsRobins,{Pid,Node}), %if Robins already a member
       if XorY == x -> ets:insert(etsRobins,{{Pid,Node},{Location,Y}});
