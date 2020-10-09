@@ -20,9 +20,9 @@
 
 -define(SERVER, ?MODULE).
 -define(updateEts ,20). %how many time per second to update the ETS's
--define(velMax , 30). %range of the random velocity of the node in meter/milisec
+%%-define(velMax , 30). %range of the random velocity of the node in meter/milisec
 -define(timeRange ,{1000,5000}). %range of the random time to change direction of the node in milisec
--define(radius ,300).
+%%-define(radius ,300).
 
 -record(moveSimulator_state, {startX,endX,startY,endY,demiZone,radius,velMax,myX,myY,time,velocity,direction,myBatman,pcPid,tokill}).
 

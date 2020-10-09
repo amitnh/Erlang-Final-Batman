@@ -19,8 +19,8 @@
   code_change/3,castPlease/1]).
 
 -define(SERVER, ?MODULE).
--define(N, 100). % number of processes in all the program "Robins"
--define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
+%%-define(N, 100). % number of processes in all the program "Robins"
+%%-define(DemilitarizedZone, 50). % how much area to add to each computer, "Demilitarized zone".
 -define(updateMainEts, 50). % refresh rate to mainServer EtsRobins
 
 
@@ -72,7 +72,9 @@ getArea([MyNode|_],[Area|_],MyNode) -> Area;
 getArea([_|T1],[_|T2],MyNode) -> getArea(T1,T2,MyNode).
 
 initRobins(MyArea,Specs) -> %spawn N/4 Robins
-  Loop = lists:seq(1,?N div 4),
+  {_Radius,NumofRobins, _DemiZone,_OGMTime,_MaxVelocity,_WindowSize,_TTL} = Specs,
+
+  Loop = lists:seq(1,NumofRobins div 4),
   %spawn a Robin and monitor it, we add the DemilitarizedZone, so the moveSimulator will know it
   [spawn(moveSimulator,start_link,[[MyArea,Specs,self()]])|| _<- Loop].
 
@@ -243,7 +245,9 @@ handle_cast({msgSent,From,To}, State = #computerStateM_state{}) ->
 %Robin crashed so we generate a new one
 handle_cast({generateRobin}, State = #computerStateM_state{}) ->
   MyArea = State#computerStateM_state.myArea,
-  spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self()]]),
+  {_Radius,_NumofRobins, DemiZone,_OGMTime,_MaxVelocity,_WindowSize,_TTL} = State#computerStateM_state.specs,
+
+  spawn(moveSimulator,start_link,[[MyArea,DemiZone,self()]]),
   {noreply, State};
 
 %someone died, update Boarders, if my boarder updated change it too
@@ -254,8 +258,10 @@ handle_cast({newBoarders,NewComputerNodes,NewComputerAreas}, State = #computerSt
 %(someone died) spawn new Robins at each {X,Y} from ListOfXY
 handle_cast({newRobinsAtXY,ListOfXY}, State = #computerStateM_state{}) ->
   MyArea = State#computerStateM_state.myArea,
+  {_Radius,_NumofRobins, DemiZone,_OGMTime,_MaxVelocity,_WindowSize,_TTL} = State#computerStateM_state.specs,
+
   castPlease({newRobinsAtXY,node,node(),area,MyArea}),
-  [spawn(moveSimulator,start_link,[[MyArea,?DemilitarizedZone,self(),{X,Y,0,0}]])|| {X,Y}<- ListOfXY],
+  [spawn(moveSimulator,start_link,[[MyArea,DemiZone,self(),{X,Y,0,0}]])|| {X,Y}<- ListOfXY],
   {noreply, State#computerStateM_state{}};
 
 handle_cast({stopping}, State = #computerStateM_state{}) ->

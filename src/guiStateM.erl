@@ -100,7 +100,7 @@ init([ComputerNodes,MainServerNode]) ->
   SliderRadius = wxSlider:new(P, 1, 300, 1, 3000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  SliderNumofRobins = wxSlider:new(P, 1, 100, 1, 1000,
+  SliderNumofRobins = wxSlider:new(P, 1, 100, 4, 1000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
   SliderDemiZone = wxSlider:new(P, 1, 50, 0, 1000,
