@@ -212,7 +212,8 @@ end,
 %%===================================================================================
 handle_cast({ogmFromNeighbor,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #computerStateM_state{}) ->
 %%  send the OGM to all the Robins in the radius in my computer
-  ListOfRobins = moveSimulator:robinsInRadiusForRemote(MyX,MyY),
+  {Radius,_NumofRobins, _DemiZone,_OGMTime,_MaxVelocity,_WindowSize,_TTL} = State#computerStateM_state.specs,
+  ListOfRobins = moveSimulator:robinsInRadiusForRemote(MyX,MyY,Radius),
 %%  castPlease({ogmFromNeigh,mynode,node(),pidnode, {PidFrom, NodeFrom},OGM,listOFROBINS,ListOfRobins}),
   [gen_server:cast(PidTo,{ogm,OGM,{PidFrom,NodeFrom}}) ||{PidTo,_NodeTo} <- ListOfRobins],
 %%  [castPlease({PidTo1, {ogm, OGM, {PidFrom, NodeFrom}},mynode,node()}) ||{PidTo1,_NodeTo1} <- ListOfRobins],

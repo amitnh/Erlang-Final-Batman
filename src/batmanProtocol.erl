@@ -31,9 +31,9 @@
 %% OGM -> {Sequence number, TTL, Originator Address }
 %% Originator Address -> {self(),node()}
 %%%===================================================================
--define(windowSize, 128). %% Define the size of the window. only sequence numbers in the window will be counted and saved
--define(TTL, 40). %% Time To Live, travel distance of a message
--define(ORIGINATOR_INTERVAL, 1000). %% every ORIGINATOR_INTERVAL the node sends an OGM msg
+%%-define(windowSize, 128). %% Define the size of the window. only sequence numbers in the window will be counted and saved
+%%-define(TTL, 40). %% Time To Live, travel distance of a message
+%%-define(ORIGINATOR_INTERVAL, 1000). %% every ORIGINATOR_INTERVAL the node sends an OGM msg
 %%test TODO delete
 castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 
@@ -46,18 +46,19 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(PidMoveSimulator,{OGMTime,WindowSize,TTL}) ->
   {ok,Pid} = gen_server:start_link(?MODULE, [PidMoveSimulator,{OGMTime,WindowSize,TTL}], []), %{debug,[trace]}
+
   receive
-  after rand:uniform(?ORIGINATOR_INTERVAL) ->  OGMPid = spawn_link(fun()->ogmLoop(Pid) end) % every Robins start sending OGMs after random time up to 1 interval
+  after rand:uniform(OGMTime) ->  OGMPid = spawn_link(fun()->ogmLoop(Pid,OGMTime) end) % every Robins start sending OGMs after random time up to 1 interval
   end,
   gen_server:cast(Pid,{tokillonshutdown,OGMPid}),
   Pid. %sends cast to OGM every ORIGINATOR_INTERVAL
 
 
-ogmLoop(Pid)-> % sends OGM cast to batmanProtocol to send OGM every ?ORIGINATOR_INTERVAL time
+ogmLoop(Pid,OGMTime)-> % sends OGM cast to batmanProtocol to send OGM every ORIGINATOR_INTERVAL time
   receive
     exit_please -> ok
-  after ?ORIGINATOR_INTERVAL -> gen_server:cast(Pid,{sendOGM}),
-        ogmLoop(Pid)
+  after OGMTime -> gen_server:cast(Pid,{sendOGM}),
+        ogmLoop(Pid,OGMTime)
   end.
 
 %%%===================================================================
@@ -121,7 +122,8 @@ handle_call(_Request, _From, State = #batmanProtocol_state{}) ->
 
 handle_cast({sendOGM}, State = #batmanProtocol_state{}) ->
   SeqNum = State#batmanProtocol_state.seqNum +1,
-  OGM = {SeqNum, ?TTL,{State#batmanProtocol_state.pid,node()}},
+  TTL = State#batmanProtocol_state.ttl,
+  OGM = {SeqNum, TTL,{State#batmanProtocol_state.pid,node()}},
   gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM}),
   {noreply, State#batmanProtocol_state{seqNum = SeqNum}};
 
@@ -227,6 +229,7 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
   %first thing to check if the SeqNum is new, if not return State
   Known = State#batmanProtocol_state.known,
   IsKnown= maps:is_key(OriginatorAddress,Known),
+  WindowSize = State#batmanProtocol_state.windowSize,
  if IsKnown->
    %=====================in the map, update it=================
    KnownBatman = maps:get(OriginatorAddress,Known),
@@ -235,7 +238,7 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
    {_FromAdd,SeqList, LastTTL, LastValidTime} =Neighbor,
      if SeqList == [] -> % not a neighbor (yet)
         if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
-          NewKnowBatman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,lastTTL), % return a new KnownBatman with everthing updated
+          NewKnowBatman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,lastTTL,WindowSize), % return a new KnownBatman with everthing updated
           {State#batmanProtocol_state{known = maps:put(OriginatorAddress,NewKnowBatman,Known)},true,false};
         true-> % not a new *Current* Seq Num
          NewKnowBatman = {CurrentSeqNumber, BestLink, erlang:system_time(millisecond), ListOfNeighbors ++ [{FromAddress,[SeqNum], TTL, erlang:system_time(millisecond)}]},
@@ -245,7 +248,7 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
         IsNewSeq = not (lists:member(SeqNum,SeqList)),
         if  IsNewSeq -> % a new Seq Num
             if (CurrentSeqNumber < SeqNum) ->% a new *Current* Seq Num
-              Batman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,TTL), % return a new KnownBatman with everthing updated
+              Batman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,TTL,WindowSize), % return a new KnownBatman with everthing updated
               NewKnowBatman = updateBestLink(Batman,OriginatorAddress), % change the best link
               if (NewKnowBatman == deleteBatman) ->% if the neighbors list is empty
                 {State#batmanProtocol_state{known = maps:remove(OriginatorAddress,Known)},false,false};
@@ -291,14 +294,14 @@ getNeighbor(FromAddress, [_|ListOfNeighbors],TTL) -> getNeighbor(FromAddress, Li
 
 
 % return a new KnownBatman with everything updated (uses addSeqNum)
-updateCurrSeqNum({_CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}, FromAddress, SeqNum,NewTTL) ->
+updateCurrSeqNum({_CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors}, FromAddress, SeqNum,NewTTL,WindowSize) ->
 
-  UpdatedListOfNeighbors = updateInWindow(ListOfNeighbors,SeqNum),
+  UpdatedListOfNeighbors = updateInWindow(ListOfNeighbors,SeqNum,WindowSize),
   {_,_,_,NewListOfNeighbors} = addSeqNum({SeqNum, BestLink, LastAwareTime, UpdatedListOfNeighbors},FromAddress, SeqNum,NewTTL), %updates in window lists and adds the SeqNum to FromAddress
   {SeqNum, getBestLink(ListOfNeighbors,BestLink,0), erlang:system_time(millisecond), NewListOfNeighbors}.
 
 %returns lists of neighbors in the new in-window
-updateInWindow(ListOfNeighbors, CurrSeqNum) ->NewLists = [{FromAddress,lists:filter(fun(SeqNum) -> (SeqNum > (CurrSeqNum- ?windowSize)) end, SeqList), LastTTL, LastValidTime}||{FromAddress,SeqList, LastTTL, LastValidTime}<-ListOfNeighbors],
+updateInWindow(ListOfNeighbors, CurrSeqNum,WindowSize) ->NewLists = [{FromAddress,lists:filter(fun(SeqNum) -> (SeqNum > (CurrSeqNum- WindowSize)) end, SeqList), LastTTL, LastValidTime}||{FromAddress,SeqList, LastTTL, LastValidTime}<-ListOfNeighbors],
   [{FromAddress,SeqList, LastTTL, LastValidTime}||{FromAddress,SeqList, LastTTL, LastValidTime}<-NewLists,(length(SeqList)>0)]. % removes the empty neighbors
 
 

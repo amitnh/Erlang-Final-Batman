@@ -15,8 +15,8 @@
 -export([start_link/1]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, getPidsInCircle/4,
-  code_change/3, castPlease/1, robinsInRadiusForRemote/2]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, getPidsInCircle/5,
+  code_change/3, castPlease/1, robinsInRadiusForRemote/3]).
 
 -define(SERVER, ?MODULE).
 -define(updateEts ,20). %how many time per second to update the ETS's
@@ -40,7 +40,7 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 start_link([Area,Specs,PCPid]) ->
   {ok,Pid} = gen_server:start_link( ?MODULE, [Area,Specs,PCPid,{0,0,0,0}], []),%{debug,[trace]}
   Pid1 = spawn_link(fun()->etsTimer(Pid) end) ,
-  Pid2 = spawn_link(fun()->vectorTimer(Pid) end),
+  Pid2 = spawn_link(fun()->vectorTimer(Pid,Specs) end),
   gen_server:cast(Pid,{tokillonshutdown,[Pid1,Pid2]});
 
 %if a batman is switching computer
@@ -48,7 +48,7 @@ start_link([Area,Specs,PCPid,{X,Y,Dir,Vel}]) ->
   {ok,Pid} = gen_server:start_link( ?MODULE, [Area,Specs,PCPid,{X,Y,Dir,Vel}], []),%{debug,[trace]}
 
   spawn_link(fun()->etsTimer(Pid) end),
-  spawn_link(fun()->vectorTimer(Pid) end),
+  spawn_link(fun()->vectorTimer(Pid,Specs) end),
   gen_server:cast(PCPid,{monitorMe,Pid}).
 
 
@@ -62,8 +62,8 @@ etsTimer(Pid)->TimeToWait = 1000 div ?updateEts, %time to wait for sending  ?upd
             end.
 
 %update the random velocity,direction and updatetime to update
-vectorTimer(Pid)->
-
+vectorTimer(Pid,Specs)->
+  {_Radius,_NumofRobins, _DemiZone,_OGMTime,MaxVelocity,_WindowSize,_TTL} = Specs,
   {Min,Max} = ?timeRange,
   TimeToWait = Min + rand:uniform(Max-Min),
 
@@ -72,10 +72,10 @@ vectorTimer(Pid)->
     after TimeToWait ->
   %this 3 are going to the vector (in the record):
   CurrTime = erlang:system_time(millisecond),
-  Velocity = rand:uniform(?velMax*1000)/1000,
+  Velocity = rand:uniform(MaxVelocity*1000)/1000,
   Direction = rand:uniform(360), % in degrees
-  gen_server:cast(Pid,{updateMovementVector,CurrTime,Velocity,Direction}),vectorTimer(Pid)
-
+  gen_server:cast(Pid,{updateMovementVector,CurrTime,Velocity,Direction}),
+    vectorTimer(Pid,Specs)
   end .
 
 %%%===================================================================
@@ -446,32 +446,33 @@ robinsInRadius(State,OGM) ->
   StartY =  State#moveSimulator_state.startY,
   DemiZone = State#moveSimulator_state.demiZone,
   PCPid = State#moveSimulator_state.pcPid,
+  Radius = State#moveSimulator_state.radius,
   %Xlist and Ylist are all the pids in square of radius x radius
-  Xlist = getLineInRadius(etsX,MyX),
-  Ylist = getLineInRadius(etsY,MyY),
+  Xlist = getLineInRadius(etsX,MyX,Radius),
+  Ylist = getLineInRadius(etsY,MyY,Radius),
 %%  Xlist = getPrev(etsX,MyX,MyX,[]) ++ getNext(etsX,MyX,MyX,[]),
 %%  Ylist = getPrev(etsY,MyY,MyY,[]) ++ getNext(etsY,MyY,MyY,[]),
 
   % case im close to the border, i will send a request to computerServer to look for neighbors in other computers
-  if ((MyX + ?radius > EndX - DemiZone) or (MyX - ?radius > StartX + DemiZone)) ->
+  if ((MyX + Radius > EndX - DemiZone) or (MyX - Radius > StartX + DemiZone)) ->
     gen_server:cast(PCPid ,{sendOGMtoNeighborsX,MyX,MyY,OGM,{self(),node()}}); % tell the computer to send OGM to the nodes in other computer
   true->ok
     end,
-  if ((MyY + ?radius > EndY - DemiZone) or (MyY - ?radius > StartY + DemiZone) )->
+  if ((MyY + Radius > EndY - DemiZone) or (MyY - Radius > StartY + DemiZone) )->
     gen_server:cast(PCPid,{sendOGMtoNeighborsY,MyX,MyY,OGM,{self(),node()}}); %
   true->ok
     end,
 
-   [Add||Add<-getPidsInCircle(MyX,MyY,Xlist,Ylist),Add /= {self(),node()}]. % deletes myself from neighbors and return the list of pids in my radius
+   [Add||Add<-getPidsInCircle(MyX,MyY,Xlist,Ylist,Radius),Add /= {self(),node()}]. % deletes myself from neighbors and return the list of pids in my radius
 %%===========================================================
 %%===========================================================
 %%help other computer just find the pids in the radius
-robinsInRadiusForRemote(X,Y) ->
+robinsInRadiusForRemote(X,Y,Radius) ->
 
   %Xlist and Ylist are all the pids in square of (radius x radius)
-  Xlist = getLineInRadius(etsX,X),
-  Ylist = getLineInRadius(etsY,Y),
-  getPidsInCircle(X,Y,Xlist,Ylist).
+  Xlist = getLineInRadius(etsX,X,Radius),
+  Ylist = getLineInRadius(etsY,Y,Radius),
+  getPidsInCircle(X,Y,Xlist,Ylist,Radius).
 %%===========================================================
 
 
@@ -483,10 +484,10 @@ robinsInRadiusForRemote(X,Y) ->
 %%
 %% output: is 1 list with all the Addresses in my radius -> [{Pid1,Node1},{Pid2,Node1},{Pid3,Node2},...]
 %%===========================================================
-getPidsInCircle(X,Y,Xlist,Ylist)->
+getPidsInCircle(X,Y,Xlist,Ylist,Radius)->
 
   Square = getSquare(Xlist,Ylist),
-  Circle =getCircle(X,Y,Square), % Square -> [{x,y,address},...]
+  Circle =getCircle(X,Y,Square,Radius), % Square -> [{x,y,address},...]
   [Address||{_X,_Y,Address}<-Circle]. % returns only the Addresses back
 
 %%getSquare returns {x,y,address},...] withing a square of radiusXradius
@@ -500,13 +501,13 @@ getY(X,Xaddr,[{Y,Xaddr}|_])->{X,Y,Xaddr};  %found a member in Ylist with the sam
 getY(X,Xaddr,[_H|T])->getY(X,Xaddr,T);
 getY(_,_,_)-> {}.
 
-getCircle(MyX,MyY,Square) -> R = ?radius,
-  [{X,Y,Add}||{X,Y,Add}<-Square, ((X-MyX)*(X-MyX) + (Y-MyY)*(Y-MyY)) < R*R].% Square -> [{x,y,address},...]
+getCircle(MyX,MyY,Square,Radius) ->
+  [{X,Y,Add}||{X,Y,Add}<-Square, ((X-MyX)*(X-MyX) + (Y-MyY)*(Y-MyY)) < Radius*Radius].% Square -> [{x,y,address},...]
 %%  lists:filter(fun({X,Y,_Address}) -> (((X*X)+(Y*Y))< (?radius*?radius)) end, Square).
 %%===========================================================
 
 %%getLineInRadius(ETSLIST,OriginX,ListofRobinsInLine) return all robins at radius-x<x<radius+x
 
-getLineInRadius(ETS,X) -> lists:flatten([[{RobinX,{Pid,node()}}||Pid<-Pids]|| {RobinX,Pids}<- ets:tab2list(ETS),((RobinX<X+?radius) or(RobinX>X-?radius)) ]).
+getLineInRadius(ETS,X,Radius) -> lists:flatten([[{RobinX,{Pid,node()}}||Pid<-Pids]|| {RobinX,Pids}<- ets:tab2list(ETS),((RobinX<X+Radius) or(RobinX>X-Radius)) ]).
 
 
