@@ -36,7 +36,8 @@
   dc,
   liveStats,
   numOfProcesses,
-  sliders
+  sliders,
+  demi
 }).
 %%-record(guiStateM_state, {}).
 
@@ -100,7 +101,7 @@ init([ComputerNodes,MainServerNode]) ->
   SliderRadius = wxSlider:new(P, 1, 300, 1, 3000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  SliderNumofRobins = wxSlider:new(P, 1, 100, 4, 200,
+  SliderNumofRobins = wxSlider:new(P, 1, 20, 4, 200,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
   SliderDemiZone = wxSlider:new(P, 1, 50, 0, 1000,
@@ -198,7 +199,7 @@ init([ComputerNodes,MainServerNode]) ->
   %Frame is ready for display
   wxFrame:show(F),
   {ok, waiting, #guiStateM_state{mainServer = MainServerNode, env = Env, canvas = C,frame = F,panel = P,
-        text = T, nodesList = NodesList,liveStats = LiveStats, sliders = Sliders,
+        text = T, nodesList = NodesList,liveStats = LiveStats, sliders = Sliders, demi = 50,
     numOfProcesses ="0"}}.
 
 
@@ -275,7 +276,7 @@ paint(cast, {sendnewStats,Env}, State = #guiStateM_state{sliders = Sliders}) ->
   MainServer = State#guiStateM_state.mainServer,
   moveSimulator:castPlease({sendingsliders,{Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}}),
   gen_server:cast({global,MainServer},{newStats, {Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}}),
-  {next_state, paint, State};
+  {next_state, paint, State#guiStateM_state{demi = DemiZone}};
 
 paint(cast, _, State = #guiStateM_state{}) ->
   {next_state, paint, State}.
@@ -293,11 +294,11 @@ handle_sync_event(#wx{event=#wxErase{}}, _, _) -> ok.
 
 
 do_refresh(#guiStateM_state{numOfProcesses = NumOfProcess, liveStats = LiveStats, frame = F,
-  canvas = C,nodesList = NodesList},EtsList)->
+  canvas = C,nodesList = NodesList, demi = DemiZone},EtsList)->
 
   DC = wxBufferedPaintDC:new(C),
   wxDC:clear(DC),
-
+  Demi = DemiZone div 4,
   wxStaticText:setLabel(LiveStats, ["Number of processes: ",NumOfProcess]),
 
   wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
@@ -305,6 +306,15 @@ do_refresh(#guiStateM_state{numOfProcesses = NumOfProcess, liveStats = LiveStats
   wxDC:drawRectangle(DC,{0,0},{?Width,?Width}),
   wxDC:drawLine(DC,{?Width div 2,0},{?Width div 2,?Width}),
   wxDC:drawLine(DC,{0,?Width div 2},{?Width,?Width div 2}),
+
+  wxDC:setPen(DC, wxPen:new(?wxLIGHT_GREY, [{width, 2}])),
+  wxDC:drawLine(DC,{?Width div 2 -Demi,0},{?Width div 2 - Demi,?Width}),
+  wxDC:drawLine(DC,{?Width div 2 +Demi,0},{?Width div 2 + Demi,?Width}),
+  wxDC:drawLine(DC,{0,?Width div 2 + Demi},{?Width,?Width div 2 + Demi}),
+  wxDC:drawLine(DC,{0,?Width div 2 - Demi},{?Width,?Width div 2 - Demi}),
+
+
+
   wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),
   [ paintCirclesinColors(DC,NodesList,Node,X div 4,Y div 4 ) || {{_Pid,Node},{X,Y}}<- EtsList],
   wxDC:setPen(DC, wxPen:new(?wxRED, [{width, 2}])),

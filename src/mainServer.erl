@@ -70,10 +70,10 @@ init([ComputerNodes, ComputerAreas]) ->
   spawn_link(fun()->monitorComputers(ComputerNodes,node()) end),
   % specs -> {Radius,NumofRobins, DemiZone,OGMTime,MaxVelocity,WindowSize,TTL},
   %start with default values
-  spawnComputer(ComputerNodes,ComputerAreas, {300,100, 50,1000,10,128,30},loop),
+  spawnComputer(ComputerNodes,ComputerAreas, {300,4, 50,1000,10,128,30},loop),
   spawn_link(fun()->testMsgSending() end),
 
-  {ok, #mainServer_state{processes = [], computerNodes = ComputerNodes,computerAreas = ComputerAreas, specs = {300,100, 50,1000,10,128,30}}}.
+  {ok, #mainServer_state{processes = [], computerNodes = ComputerNodes,computerAreas = ComputerAreas, specs = {300,4, 50,1000,10,128,30}}}.
 testMsgSending()->
  try
   receive after 2000  ->
@@ -189,7 +189,8 @@ handle_cast({etsUpdate,FromNode,EtsX,EtsY,NumOfProcesses}, State = #mainServer_s
 
 %Removes a Robin from the ETSRobins
 handle_cast({removeRobin,Pid,Node}, State = #mainServer_state{}) ->
-  ets:delete(etsRobins, {Pid, Node}),
+  Deleted =   ets:delete(etsRobins, {Pid, Node}),
+  moveSimulator:castPlease({deleted, Deleted}),
 %%gen_server:cast({global, tal@ubuntu},{test,{removedPid,Pid,etsRobins,ets:tab2list(etsRobins),deleted,Bool}}),
   {noreply, State};
 

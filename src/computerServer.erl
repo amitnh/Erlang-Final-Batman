@@ -24,7 +24,7 @@
 -define(updateMainEts, 50). % refresh rate to mainServer EtsRobins
 
 
--record(computerStateM_state, {computerNodes,computersArea, myArea,myMonitor,mainServer,specs}).
+-record(computerStateM_state, {computerNodes,computersArea, myArea,myMonitor,mainServer,specs,tokill}).
 %%test TODO delete
 castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
 %%%===================================================================
@@ -43,7 +43,8 @@ receive after 500-> ok end,
   gen_server:call(Pid,{updateMyMonitor,Mymonitor}),
   monitorAllRobins(Mymonitor),
 
-  spawn_link(fun()->updateMainServerEts(MainServerNode) end).
+  ToKill = spawn_link(fun()->updateMainServerEts(MainServerNode) end),
+  gen_server:cast(Pid,{tokillonshutdown,[Mymonitor,ToKill]}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -165,6 +166,9 @@ handle_cast({createBatman,{X,Y,Dir,Vel}}, State = #computerStateM_state{})->
 handle_cast(stop, State = #computerStateM_state{}) ->
   {stop, normal, State};
 
+handle_cast({tokillonshutdown,Pids}, State = #computerStateM_state{}) -> %case the batman has no neighbors
+  {noreply, State#computerStateM_state{tokill = Pids}};
+
 handle_cast({sendOGMtoNeighborsX,MyX,MyY,OGM,{PidFrom,NodeFrom}}, State = #computerStateM_state{}) -> %todo todo only temp
   try
   {StartX,EndX,_,_}= State#computerStateM_state.myArea,
@@ -229,11 +233,12 @@ handle_cast({monitorMe,From}, State = #computerStateM_state{}) ->
 
 %removes Robin from ETS and cast mainServer to do so(Same as above but without X,Y
 handle_cast({removeRobin,Pid}, State = #computerStateM_state{}) ->
-%%  {X,Y} = searchXYbyPid(Pid),
+  {X,Y} = searchXYbyPid(Pid),
   MainServerNode = State#computerStateM_state.mainServer,
+  castPlease({sendingDElete,Pid,node()}),
   gen_server:cast({global, MainServerNode},{removeRobin,Pid,node()}),
 %%  castPlease({removing,pid,Pid,xy,X,Y,ets:tab2list(etsX),ets:tab2list(etsY)}),
-%%  removeRobin(Pid,X,Y, State),
+  removeRobin(Pid,X,Y, State),
   {noreply, State};
 
 handle_cast({msgSent,From,To}, State = #computerStateM_state{}) ->
@@ -291,10 +296,11 @@ handle_info(_Info, State = #computerStateM_state{}) ->
 %% with Reason. The return value is ignored.
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #computerStateM_state{}) -> term()).
-terminate(_Reason, _State = #computerStateM_state{}) ->
+terminate(_Reason, State = #computerStateM_state{}) ->
   %when computer server terminates, he kills all robins
   [[gen_server:cast(Pid,stop)||Pid<-Pids]|| {_RobinX,Pids}<- ets:tab2list(etsX)],
-
+  Tokill = State#computerStateM_state.tokill,
+  [Pid!{exit_please}||Pid<-Tokill],
   ok.
 
 %% @private
@@ -377,6 +383,7 @@ monitorAllRobins(MyMonitor) ->
 
 updateMainServerEts(MainServerNode)->
   receive
+      _-> ok
       after 1000 div ?updateMainEts ->
           try
             gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY),length(processes())}),
@@ -391,18 +398,27 @@ updateMainServerEts(MainServerNode)->
 monitorRobins(MyComputerServer) ->
   receive
     {addRobin, Pid} ->
-      erlang:monitor(process,Pid);
+      erlang:monitor(process,Pid),
+      monitorRobins(MyComputerServer);
 
     {'DOWN', Ref, process, Pid, normal} ->
-      gen_server:cast(MyComputerServer,{removeRobin, Pid});
+      castPlease({removeRobin,Pid}),
+      gen_server:cast(MyComputerServer,{removeRobin, Pid}),
+      monitorRobins(MyComputerServer);
 
-    {'DOWN', Ref, process, Pid, shutdown} ->castPlease({shuttingdown,ref,Ref,pid,Pid});
+    {'DOWN', Ref, process, Pid, shutdown} ->
+      castPlease({shuttingdown,ref,Ref,pid,Pid}),
+      castPlease({removeRobin,Pid}),
+      gen_server:cast(MyComputerServer,{removeRobin, Pid}),
+      monitorRobins(MyComputerServer);
 
     {'DOWN', Ref, process, Pid,  Reason} ->
       castPlease({notnormal,ref,Ref,pid,Pid,reason,Reason}),
       gen_server:cast(MyComputerServer,{removeRobin, Pid}),
-      gen_server:cast(MyComputerServer,{generateRobin});
 
-    SomeError ->   castPlease({someError,SomeError})
-  end,
-  monitorRobins(MyComputerServer).
+%%      gen_server:cast(MyComputerServer,{generateRobin}),
+      monitorRobins(MyComputerServer);
+
+    _SomeError ->   ok_exiting
+  end.
+

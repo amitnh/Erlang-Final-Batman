@@ -39,24 +39,26 @@ castPlease(MSG)-> gen_server:cast({global, tal@ubuntu},{test,MSG}).
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link([Area,Specs,PCPid]) ->
   {ok,Pid} = gen_server:start_link( ?MODULE, [Area,Specs,PCPid,{0,0,0,0}], []),%{debug,[trace]}
-  Pid1 = spawn_link(fun()->etsTimer(Pid) end) ,
-  Pid2 = spawn_link(fun()->vectorTimer(Pid,Specs) end),
+  Pid1 = spawn(fun()->etsTimer(Pid) end) ,
+  Pid2 = spawn(fun()->vectorTimer(Pid,Specs) end),
   gen_server:cast(Pid,{tokillonshutdown,[Pid1,Pid2]});
 
 %if a batman is switching computer
 start_link([Area,Specs,PCPid,{X,Y,Dir,Vel}]) ->
   {ok,Pid} = gen_server:start_link( ?MODULE, [Area,Specs,PCPid,{X,Y,Dir,Vel}], []),%{debug,[trace]}
 
-  spawn_link(fun()->etsTimer(Pid) end),
-  spawn_link(fun()->vectorTimer(Pid,Specs) end),
-  gen_server:cast(PCPid,{monitorMe,Pid}).
+  Pid1 = spawn_link(fun()->etsTimer(Pid) end),
+  Pid2 = spawn_link(fun()->vectorTimer(Pid,Specs) end),
+  gen_server:cast(PCPid,{monitorMe,Pid}),
+  gen_server:cast(Pid,{tokillonshutdown,[Pid1,Pid2]}).
 
 
 %send a cast to update the main ets's every ?updateEts milisecounds
 etsTimer(Pid)->TimeToWait = 1000 div ?updateEts, %time to wait for sending  ?updateEts msgs in 1 sec
             receive
-              _->ok
-              after TimeToWait ->
+              _->  castPlease(etstimetTermintating)
+
+            after TimeToWait ->
               gen_server:cast(Pid,{updateEts}),
               etsTimer(Pid)
             end.
@@ -68,8 +70,9 @@ vectorTimer(Pid,Specs)->
   TimeToWait = Min + rand:uniform(Max-Min),
 
   receive
-    _->ok
-    after TimeToWait ->
+    _->  castPlease(vectortimerTerminating)
+
+  after TimeToWait ->
   %this 3 are going to the vector (in the record):
   CurrTime = erlang:system_time(millisecond),
   Velocity = rand:uniform(MaxVelocity*1000)/1000,
@@ -158,15 +161,14 @@ updatedXYlocations(State)->
             if ((X>EndX+DemilitarizedZone) or (X<StartX-DemilitarizedZone) or (Y>EndY+DemilitarizedZone) or (Y<StartY-DemilitarizedZone)) ->
               try %wait for the computerServer to bring back an answer about the borders
                 {NewStartX,NewEndX,NewStartY,NewEndY,ToTerminate} = gen_server:call(PCPid,{updateBorders,{round(X),round(Y),State#moveSimulator_state.direction,State#moveSimulator_state.velocity}}),
-                if ToTerminate ->
-                  gen_server:cast(self(),stop);
+                if ToTerminate ->ok;
+%%                  gen_server:cast(self(),stop);
                   %gen_server:stop(self());%Shut down MoveSimulator Server
-      %%          gen_server:stop(State#moveSimulator_state.myBatman,normal,1000),%Moving to another computer, Shut down Batman Server
       %%        gen_server:stop(self(), {normal,round(X),round(Y)},infinity);%Shut down MoveSimulator Server
                   true -> gen_server:cast(self(),{updateBorders,NewStartX,NewEndX,NewStartY,NewEndY})
                 end,       {X,Y,CurrTime,true}
 
-              catch _:_-> innerConnectionError
+              catch _:_-> castPlease(innerConnectionError)
               end;
               true -> {X,Y,CurrTime,false}
             end
@@ -227,9 +229,9 @@ handle_call(_Request, _From, State = #moveSimulator_state{}) ->
 handle_cast({sendMsg,To,To,_Msg}, State = #moveSimulator_state{}) -> % case someone tell me to send Msg to myself
   {noreply, State#moveSimulator_state{}};
 
-handle_cast({tokillonshutdown,OGMPids}, State = #moveSimulator_state{}) -> %case the batman has no neighbors
+handle_cast({tokillonshutdown,Pids}, State = #moveSimulator_state{}) -> %case the batman has no neighbors
 
-  {noreply, State#moveSimulator_state{tokill = OGMPids}};
+  {noreply, State#moveSimulator_state{tokill = Pids}};
 
 handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
 %%  castPlease({firstSendMsgMoveSimulator,to,To,from,From,msg,Msg}),
@@ -252,7 +254,7 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                    %1.delete the neighbor 2.send the msg again to the next best link
               gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),
-              gen_server:cast(self(),{sendMSG,To,{self(),node()},Msg}),% send the MSG again
+              gen_server:cast(self(),{sendMsg,To,{self(),node()},Msg}),% send the MSG again
               {noreply, State#moveSimulator_state{}}
           end,
           {noreply, State#moveSimulator_state{}};
@@ -264,7 +266,7 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                      %1.delete the neighbor 2.send the msg again to the next best link
               gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),
-              gen_server:cast(self(),{sendMSG,To,{self(),node()},Msg}),% send the MSG again
+              gen_server:cast(self(),{sendMsg,To,{self(),node()},Msg}),% send the MSG again
               {noreply, State#moveSimulator_state{}}
           end,
               {noreply, State#moveSimulator_state{}}
@@ -379,22 +381,18 @@ handle_info(_Info, State = #moveSimulator_state{}) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #moveSimulator_state{}) -> term()).
 
-terminate(_Reason, State = #moveSimulator_state{}) ->
+terminate(Reason, State = #moveSimulator_state{}) ->
   Batman = State#moveSimulator_state.myBatman,
-  gen_server:cast(Batman,stop),
-  Tokill = State#moveSimulator_state.tokill,
-  [Pid!{exit_please}||Pid<-Tokill],
-  if _Reason == shutdown -> ok;
-    true ->
-    try
 
+  Tokills = State#moveSimulator_state.tokill,
+
+  if (Reason == normal) ->
     X = round(State#moveSimulator_state.myX),
     Y = round(State#moveSimulator_state.myY),
     Pid = self(),
 
     ObjectX = ets:lookup(etsX,X),
     ObjectY= ets:lookup(etsY,Y),
-
     if ((ObjectX == []) or (ObjectY == []))  -> ok;
     true->
         [{_, TempX}] = ObjectX,
@@ -405,19 +403,29 @@ terminate(_Reason, State = #moveSimulator_state{}) ->
           true->  ets:delete(etsX,X)
         end,
         if (length(ListY)>0) ->ets:insert(etsY,[{Y,ListY}]);
-          true->  ets:delete(etsY,Y)
+          true-> ets:delete(etsY,Y)
         end,
       ObjectXcheck = ets:lookup(etsX,X),
       ObjectYcheck= ets:lookup(etsY,Y),
       if ((ObjectXcheck == []) or (ObjectYcheck == []))  -> ok;
-        true -> terminate(_Reason, State), castPlease(terminateAgain)
+        true -> terminate(Reason, State), castPlease(terminateAgain)
       end
+      end;
+%%      gen_server:cast(Batman,stop);
+%%      catch _:M -> castPlease({movSimTerminate,catchError,M})
+%%      end;
+      true -> ok
       end,
-      gen_server:cast(Batman,stop)
-      catch _:M -> castPlease({movSimTerminate,catchError,M})
-      end
-      end,
-    ok.
+  try
+    [Tokill!exit_please||Tokill<-Tokills]
+  catch
+    _:_  ->ok
+  end ,
+  gen_server:cast(State#moveSimulator_state.pcPid,{removeRobin, self()}),
+  gen_server:cast(Batman, {stop,Reason}),
+  receive
+  after 50 -> ok
+  end.
 
 %% @private
 %% @doc Convert process state when code is changed
