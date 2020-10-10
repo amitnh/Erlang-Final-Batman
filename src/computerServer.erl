@@ -142,6 +142,11 @@ handle_call({getKnownFrom, PidFrom}, _From, State = #computerStateM_state{}) ->
     catch _:_ -> {reply, {notfound,notfound}, State}
   end;
 
+%returns the number of processes on my node
+handle_call({getProcesses}, _From, State = #computerStateM_state{}) ->
+  Reply = length(processes()),
+ {reply, Reply, State};
+
 
 
 handle_call(Request, _From, State = #computerStateM_state{}) ->
@@ -383,10 +388,10 @@ monitorAllRobins(MyMonitor) ->
 
 updateMainServerEts(MainServerNode)->
   receive
-      _-> ok
+      _-> ok, exit(nodeDown)
       after 1000 div ?updateMainEts ->
           try
-            gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY),length(processes())}),
+            gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)}),
             updateMainServerEts(MainServerNode)
           catch _:_-> ok
           end
@@ -419,6 +424,6 @@ monitorRobins(MyComputerServer) ->
 %%      gen_server:cast(MyComputerServer,{generateRobin}),
       monitorRobins(MyComputerServer);
 
-    _SomeError ->   ok_exiting
+    _SomeError ->  exit(nodeDown)
   end.
 

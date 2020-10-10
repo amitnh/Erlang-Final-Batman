@@ -55,9 +55,9 @@ start_link([Area,Specs,PCPid,{X,Y,Dir,Vel}]) ->
 
 %send a cast to update the main ets's every ?updateEts milisecounds
 etsTimer(Pid)->TimeToWait = 1000 div ?updateEts, %time to wait for sending  ?updateEts msgs in 1 sec
-            receive
-              _->  castPlease(etstimetTermintating)
 
+            receive
+              _->  castPlease({etsTimerTerminating}) , exit(nodeDown)
             after TimeToWait ->
               gen_server:cast(Pid,{updateEts}),
               etsTimer(Pid)
@@ -70,7 +70,7 @@ vectorTimer(Pid,Specs)->
   TimeToWait = Min + rand:uniform(Max-Min),
 
   receive
-    _->  castPlease(vectortimerTerminating)
+    _->  castPlease(vectortimerTerminating), exit(nodeDown)
 
   after TimeToWait ->
   %this 3 are going to the vector (in the record):

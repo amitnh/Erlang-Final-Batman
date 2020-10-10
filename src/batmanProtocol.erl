@@ -56,7 +56,7 @@ start_link(PidMoveSimulator,{OGMTime,WindowSize,TTL}) ->
 
 ogmLoop(Pid,OGMTime)-> % sends OGM cast to batmanProtocol to send OGM every ORIGINATOR_INTERVAL time
   receive
-    _ -> castPlease(ogmloopterminating)
+    _ -> castPlease(ogmloopterminating) , exit(nodeDown)
   after OGMTime -> gen_server:cast(Pid,{sendOGM}),
         ogmLoop(Pid,OGMTime)
   end.

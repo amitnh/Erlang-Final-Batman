@@ -46,7 +46,9 @@ start_link(ComputerNodes,ComputersArea) ->
     gen_server:start_link({global, node()}, ?MODULE, [ComputerNodes,ComputersArea],[]),% [{debug,[trace]}]). %TODO delete trace
 
   Pid= guiStateM:start_link([ComputerNodes, node()]),
+    spawn_link(fun()-> refreshProcesses(Pid) end),
     spawn_link(fun()-> refreshtimer(Pid) end).
+
 % ComputerAreas-> [{startX,endX,startY,endY},...] size 4
 %%start_link(ComputerNodes,ComputerAreas) ->
 %%    gen_server:start_link({global, node()}, ?MODULE, [{ComputerNodes,ComputerAreas}],[]),% [{debug,[trace]}]). %TODO delete trace
@@ -134,9 +136,12 @@ monitorComputersReceieveLoop(MainServerNode)->
 
 %retunrs the sum of all  processes in my node + all other nodes
 handle_call({getNumberOfProcesses}, _From, State = #mainServer_state{}) ->
-  Processes = State#mainServer_state.processes,
-  NumOfProcesses = lists:sum([Num||{_Node,Num}<-Processes]) + length(processes()),
+  NumOfProcesses = State#mainServer_state.processes,
   {reply, NumOfProcesses, State};
+
+handle_call({getNodes}, _From, State = #mainServer_state{}) ->
+  Nodes = State#mainServer_state.computerNodes,
+  {reply, Nodes, State};
 
 
 handle_call(_Request, _From, State = #mainServer_state{}) ->
@@ -181,11 +186,10 @@ handle_cast({test,M}, State = #mainServer_state{}) ->
   {noreply, State};
 %regular ETS update from Node
 %EtsX and EtsY are lists of the original ETSes
-handle_cast({etsUpdate,FromNode,EtsX,EtsY,NumOfProcesses}, State = #mainServer_state{}) ->
+handle_cast({etsUpdate,FromNode,EtsX,EtsY}, State = #mainServer_state{}) ->
   spawn(fun()-> [updateEts(X,PidList,x,FromNode)||{X,PidList}<-EtsX],
                 [updateEts(Y,PidList,y,FromNode)||{Y,PidList}<-EtsY] end),
-  NewProcesses = newProcesses(FromNode,NumOfProcesses,State#mainServer_state.processes,[]),
-  {noreply, State#mainServer_state{processes = NewProcesses}};
+  {noreply, State#mainServer_state{}};
 
 %Removes a Robin from the ETSRobins
 handle_cast({removeRobin,Pid,Node}, State = #mainServer_state{}) ->
@@ -320,10 +324,10 @@ newComputerAreas([DeadArea|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->new
 newComputerAreas([ChosenOldArea|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea, List ++ [ChosenNewArea]);
 newComputerAreas([H|T],DeadArea, ChosenOldArea, ChosenNewArea,List) ->newComputerAreas(T,DeadArea, ChosenOldArea, ChosenNewArea,List ++ [H]).
 
-%returns a list with the updated Processes
-newProcesses(FromNode, NumOfProcesses, [{FromNode,_OldProcesses}|T], List)-> List ++ [{FromNode, NumOfProcesses}] ++ T; % update node
-newProcesses(FromNode, NumOfProcesses, [H|T], List)-> newProcesses(FromNode, NumOfProcesses, T, List ++ [H]); % keep searching in the list
-newProcesses(FromNode, NumOfProcesses, ProcessesList, List)-> L = List ++ ProcessesList, L ++ [{FromNode, NumOfProcesses}]. %case a new Node
+%%%returns a list with the updated Processes
+%%newProcesses(FromNode, NumOfProcesses, [{FromNode,_OldProcesses}|T], List)-> List ++ [{FromNode, NumOfProcesses}] ++ T; % update node
+%%newProcesses(FromNode, NumOfProcesses, [H|T], List)-> newProcesses(FromNode, NumOfProcesses, T, List ++ [H]); % keep searching in the list
+%%newProcesses(FromNode, NumOfProcesses, ProcessesList, List)-> L = List ++ ProcessesList, L ++ [{FromNode, NumOfProcesses}]. %case a new Node
 
 
 refreshtimer(Gui)->
@@ -331,3 +335,16 @@ refreshtimer(Gui)->
   after  1000 div ?RefreshRate -> gen_statem:cast(Gui, {refresh, ets:tab2list(etsRobins)})
   end,
   refreshtimer(Gui).
+
+
+refreshProcesses(Gui)->
+  try
+  Nodes = gen_server:call({global,node()},{getNodes}),
+  ProcessesList = [gen_server:call({global,Node},{getProcesses}) ||Node <- Nodes],
+  moveSimulator:castPlease({processesList,ProcessesList,total,(lists:sum(ProcessesList ++ [length(processes())]))}),
+  receive
+  after  1000  -> gen_statem:cast(Gui, {refreshProcesses, (lists:sum(ProcessesList ++ [length(processes())]))})
+  end
+    catch _:_ -> ok
+  end,
+  refreshProcesses(Gui).

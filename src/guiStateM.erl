@@ -50,7 +50,7 @@
 %% function does not return until Module:init/1 has returned.
 start_link([ComputerNodes, MainServerNode]) ->
   {ok,Pid} = gen_statem:start_link({global, ?SERVER}, ?MODULE, [ComputerNodes,MainServerNode], []),
-  spawn_link(fun()-> refreshtimer(Pid) end),
+%%  spawn_link(fun()-> refreshtimer(Pid) end),
   Pid.
 
 
@@ -101,7 +101,7 @@ init([ComputerNodes,MainServerNode]) ->
   SliderRadius = wxSlider:new(P, 1, 300, 1, 3000,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
-  SliderNumofRobins = wxSlider:new(P, 1, 20, 4, 200,
+  SliderNumofRobins = wxSlider:new(P, 1, 20, 4, 400,
     [{style, ?wxSL_HORIZONTAL bor
       ?wxSL_LABELS}]),
   SliderDemiZone = wxSlider:new(P, 1, 50, 0, 1000,
@@ -200,7 +200,7 @@ init([ComputerNodes,MainServerNode]) ->
   wxFrame:show(F),
   {ok, waiting, #guiStateM_state{mainServer = MainServerNode, env = Env, canvas = C,frame = F,panel = P,
         text = T, nodesList = NodesList,liveStats = LiveStats, sliders = Sliders, demi = 50,
-    numOfProcesses ="0"}}.
+    numOfProcesses = 0}}.
 
 
 
@@ -256,9 +256,9 @@ paint(cast, {refresh,ETS}, State = #guiStateM_state{}) ->
   do_refresh(State,ETS),
   {next_state, paint, State};
 
-
-paint(cast, {numOfProcesses,NumOfProcesses}, State = #guiStateM_state{}) ->
+paint(cast, {refreshProcesses,NumOfProcesses}, State = #guiStateM_state{}) ->
 {next_state, paint, State#guiStateM_state{numOfProcesses = NumOfProcesses}};
+
 
 %Sliders = {SliderRadius,SliderNumofRobins, SliderDemiZone,SliderOGMTime},
 %send to mainServer the new stats the user inserted in sliders
@@ -299,7 +299,7 @@ do_refresh(#guiStateM_state{numOfProcesses = NumOfProcess, liveStats = LiveStats
   DC = wxBufferedPaintDC:new(C),
   wxDC:clear(DC),
   Demi = DemiZone div 4,
-  wxStaticText:setLabel(LiveStats, ["Number of processes: ",NumOfProcess]),
+  wxStaticText:setLabel(LiveStats, ["Number of processes: ",integer_to_list(NumOfProcess)]),
 
   wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
   wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
@@ -401,8 +401,8 @@ code_change(_OldVsn, StateName, State = #guiStateM_state{}, _Extra) ->
 %%%===================================================================
 
 %Asks the MainServer how many processes we have gloabally and send to gui to display on screen
-refreshtimer(Gui)->
-  receive
-  after 1000 -> gen_statem:cast(Gui, {numOfProcesses, integer_to_list(gen_server:call({global,node()}, {getNumberOfProcesses}))})
-  end,
-  refreshtimer(Gui).
+%%refreshtimer(Gui)->
+%%  receive
+%%  after 1000 -> gen_statem:cast(Gui, {numOfProcesses, integer_to_list(gen_server:call({global,node()}, {getNumberOfProcesses}))})
+%%  end,
+%%  refreshtimer(Gui).
