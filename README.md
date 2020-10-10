@@ -24,9 +24,14 @@ it can work on 2-5 diffrent nodes (computers)
    each of X or Y :  have to start with 0 or end with 2000
    
    *for example:*
-   1. ive started 3 nodes with: erl -sname amit, erl -sname nati, erl -sname tal
-   2. ive compiled all the files
-   3. on tal@ubuntu iv'e ran the command: mainServer:start_link([amit@ubuntu,nati@ubuntu],[{0,1000,0,2000},{1000,2000,0,2000}]).
+   1. Start 3 nodes with: erl -sname amit, erl -sname nati, erl -sname tal
+   2. Compile all the files
+   3. On tal@ubuntu run the command: mainServer:start_link([amit@ubuntu,nati@ubuntu],[{0,1000,0,2000},{1000,2000,0,2000}]).
    
-   or for example with 5 computer: mainServer:start_link([a@ubuntu, b@ubuntu, c@ubuntu, d@ubuntu],[{0,1000,0,1000},{1000,2000,0,1000},{0,1000,1000,2000},{1000,2000,1000,2000}]).
+   Or for example with 5 computer: mainServer:start_link([a@ubuntu, b@ubuntu, c@ubuntu, d@ubuntu],[{0,1000,0,1000},{1000,2000,0,1000},{0,1000,1000,2000},{1000,2000,1000,2000}]).
    
+   
+   
+this project was written and tested on:
+Ubuntu 18.04.5 LTS
+Erlang OTP 20
