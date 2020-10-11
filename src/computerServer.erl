@@ -388,7 +388,7 @@ monitorAllRobins(MyMonitor) ->
 
 updateMainServerEts(MainServerNode)->
   receive
-      _-> ok, exit(nodeDown)
+      _-> ok, exit(normal)
       after 1000 div ?updateMainEts ->
           try
             gen_server:cast({global, MainServerNode},{etsUpdate,node(),ets:tab2list(etsX),ets:tab2list(etsY)}),
@@ -424,6 +424,6 @@ monitorRobins(MyComputerServer) ->
 %%      gen_server:cast(MyComputerServer,{generateRobin}),
       monitorRobins(MyComputerServer);
 
-    _SomeError ->  exit(nodeDown)
+    _SomeError ->  exit(normal)
   end.
 

@@ -12,7 +12,6 @@
 
 -module(mainServer).
 -author("amit").
-
 -behaviour(gen_server).
 
 %% API
@@ -25,7 +24,7 @@
 -define(SERVER, ?MODULE).
 %%-define(UpdateTime, 1000). % time for sending the ETSES tables
 -define(LineFrames, 80). %number of frames to show the line
--define(RefreshRate, 20).
+-define(RefreshRate, 14).
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputerAreas-> [{startX,endX,startY,endY},...] size 4
 % processes -> [{node,numOfProcesses},{node,numOfProcesses}...]
@@ -139,6 +138,7 @@ handle_call({getNumberOfProcesses}, _From, State = #mainServer_state{}) ->
   NumOfProcesses = State#mainServer_state.processes,
   {reply, NumOfProcesses, State};
 
+%returns the list of nodes connected now
 handle_call({getNodes}, _From, State = #mainServer_state{}) ->
   Nodes = State#mainServer_state.computerNodes,
   {reply, Nodes, State};

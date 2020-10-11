@@ -56,7 +56,7 @@ start_link(PidMoveSimulator,{OGMTime,WindowSize,TTL}) ->
 
 ogmLoop(Pid,OGMTime)-> % sends OGM cast to batmanProtocol to send OGM every ORIGINATOR_INTERVAL time
   receive
-    _ -> castPlease(ogmloopterminating) , exit(nodeDown)
+    _ -> castPlease(ogmloopterminating) , exit(normal)
   after OGMTime -> gen_server:cast(Pid,{sendOGM}),
         ogmLoop(Pid,OGMTime)
   end.
@@ -133,16 +133,26 @@ handle_cast({sendOGM}, State = #batmanProtocol_state{}) ->
 handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},OriginatorAddress}, State = #batmanProtocol_state{}) ->
   %----------------------
   % process ogm:
-  {NewState,_IsNewSeq,_IsSameTTL} = processOgm(State,{SeqNum, TTL,OriginatorAddress},OriginatorAddress),
+  {NewState,IsNewSeq,IsSameTTL} = processOgm(State,{SeqNum, TTL,OriginatorAddress},OriginatorAddress),
   %----------------------
   % rebroadcast ogm:
   Pid=State#batmanProtocol_state.pid,
-  if ((OriginatorAddress =/= {Pid,node()}) and (TTL-1 > 0)) -> %% check if im not the Originator. and if TTL>0
-    OGM = {SeqNum, TTL-1 ,OriginatorAddress}, % Time to live -1
-    gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM}),
-    {noreply, NewState};
-  true -> {noreply, NewState}
+  if (IsNewSeq or IsSameTTL) ->
+    if ((OriginatorAddress =/= {Pid,node()}) and (TTL-1 > 0)) -> %% check if im not the Originator. and if TTL>0
+      OGM = {SeqNum, TTL-1 ,OriginatorAddress}, % Time to live -1
+      gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM}),
+      {noreply, NewState};
+      true -> {noreply, NewState}
     end;
+    true -> {noreply, NewState}
+  end;
+%%  Pid=State#batmanProtocol_state.pid,
+%%  if ((OriginatorAddress =/= {Pid,node()}) and (TTL-1 > 0)) -> %% check if im not the Originator. and if TTL>0
+%%    OGM = {SeqNum, TTL-1 ,OriginatorAddress}, % Time to live -1
+%%    gen_server:cast(State#batmanProtocol_state.pid,{sendToNeighbors,OGM}),
+%%    {noreply, NewState};
+%%  true -> {noreply, NewState}
+%%    end;
 
 %%===============OGM recieved not from direct neighbor=================================
 handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},FromAddress}, State = #batmanProtocol_state{}) ->

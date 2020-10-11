@@ -57,7 +57,7 @@ start_link([Area,Specs,PCPid,{X,Y,Dir,Vel}]) ->
 etsTimer(Pid)->TimeToWait = 1000 div ?updateEts, %time to wait for sending  ?updateEts msgs in 1 sec
 
             receive
-              _->  castPlease({etsTimerTerminating}) , exit(nodeDown)
+              _->  castPlease({etsTimerTerminating}) , exit(normal)
             after TimeToWait ->
               gen_server:cast(Pid,{updateEts}),
               etsTimer(Pid)
@@ -70,7 +70,7 @@ vectorTimer(Pid,Specs)->
   TimeToWait = Min + rand:uniform(Max-Min),
 
   receive
-    _->  castPlease(vectortimerTerminating), exit(nodeDown)
+    _->  castPlease(vectortimerTerminating), exit(normal)
 
   after TimeToWait ->
   %this 3 are going to the vector (in the record):
@@ -156,7 +156,7 @@ updatedXYlocations(State)->
   %boarders check:
   if ((X < 0) or (X > 2000) or (Y < 0) or (Y > 2000)) ->
             gen_server:cast(self(),{changeDir}),
-    {X0,Y0,CurrTime,false};
+    {X0,Y0,CurrTime,false,true};
     true ->  %if X or Y are out of bounds, need to check if theres a new border or if a terminate is necessary
             if ((X>EndX+DemilitarizedZone) or (X<StartX-DemilitarizedZone) or (Y>EndY+DemilitarizedZone) or (Y<StartY-DemilitarizedZone)) ->
               try %wait for the computerServer to bring back an answer about the borders
@@ -166,11 +166,11 @@ updatedXYlocations(State)->
                   %gen_server:stop(self());%Shut down MoveSimulator Server
       %%        gen_server:stop(self(), {normal,round(X),round(Y)},infinity);%Shut down MoveSimulator Server
                   true -> gen_server:cast(self(),{updateBorders,NewStartX,NewEndX,NewStartY,NewEndY})
-                end,       {X,Y,CurrTime,true}
+                end,       {X,Y,CurrTime,true,false}
 
               catch _:_-> castPlease(innerConnectionError)
               end;
-              true -> {X,Y,CurrTime,false}
+              true -> {X,Y,CurrTime,false,false}
             end
 
   end.
@@ -295,16 +295,16 @@ handle_cast({updateMovementVector,CurrTime,Velocity,Direction}, State = #moveSim
 handle_cast({changeDir}, State = #moveSimulator_state{}) ->
   Direction = State#moveSimulator_state.direction,
   NewDirection = (0 - Direction),
+
 {noreply, State#moveSimulator_state{direction = NewDirection}};
 
 %updateEts updates the location of my PID in the etsX and etsY
 handle_cast({updateEts}, State = #moveSimulator_state{}) ->
-  {X,Y,CurrTime,ToTerminate} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
+  {X,Y,CurrTime,ToTerminate,ChangedDir} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
    if  ToTerminate -> {stop, normal, State};
      true ->
      RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
     RoundedOldY = round(State#moveSimulator_state.myY),
-
     try
     [{_Keyx,Tempx}] = ets:lookup(etsX,RoundedOldX),
     [{_Keyy,Tempy}] = ets:lookup(etsY,RoundedOldY),
@@ -404,12 +404,12 @@ terminate(Reason, State = #moveSimulator_state{}) ->
         end,
         if (length(ListY)>0) ->ets:insert(etsY,[{Y,ListY}]);
           true-> ets:delete(etsY,Y)
-        end,
-      ObjectXcheck = ets:lookup(etsX,X),
-      ObjectYcheck= ets:lookup(etsY,Y),
-      if ((ObjectXcheck == []) or (ObjectYcheck == []))  -> ok;
-        true -> terminate(Reason, State), castPlease(terminateAgain)
-      end
+        end
+%%      ObjectXcheck = ets:lookup(etsX,X),
+%%      ObjectYcheck= ets:lookup(etsY,Y),
+%%      if ((ObjectXcheck == []) or (ObjectYcheck == []))  -> ok;
+%%        true -> terminate(Reason, State), castPlease(terminateAgain)
+%%      end
       end;
 %%      gen_server:cast(Batman,stop);
 %%      catch _:M -> castPlease({movSimTerminate,catchError,M})
