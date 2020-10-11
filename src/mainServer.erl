@@ -150,13 +150,13 @@ handle_call(_Request, _From, State = #mainServer_state{}) ->
 
 
 
-deleteallETS() -> First = ets:first(etsRobins),
-  deleteallETS(First).
-deleteallETS('$end_of_table') -> ok;
-deleteallETS(Todelete) ->
-  Next = ets:next(etsRobins,Todelete),
-  ets:delete(etsRobins,Todelete),
-  deleteallETS(Next).
+deleteallETS(ETS) -> First = ets:first(ETS),
+  deleteallETS(ETS,First).
+deleteallETS(_,'$end_of_table') -> ok;
+deleteallETS(ETS,Todelete) ->
+  Next = ets:next(ETS,Todelete),
+  ets:delete(ETS,Todelete),
+  deleteallETS(ETS,Next).
 
 %takes a list of pids from ETSX or ETSY, and updates their location in the ETSROBINS
 updateEts(_,[],_,_)-> ok;
@@ -259,7 +259,8 @@ handle_cast({nodedown, MyNode}, State = #mainServer_state{}) ->
 %user inserted new Stats :{Radius,NumofRobins,DemiZone,ORIGINATOR_INTERVAL,MaxVelocity,WindowSize,TTL}
 %Restart ComputerServers with the new Stats, also send each ComputerServer his old robins XY values
 handle_cast({newStats,NewSpecs}, State = #mainServer_state{}) ->
-  deleteallETS(),
+  deleteallETS(etsRobins),
+  deleteallETS(etsMsgs),
   Nodes = State#mainServer_state.computerNodes,
 %%  [gen_server:stop({global,Node})||Node<-Nodes],
   [gen_server:cast({global, Node}, stop)||Node<-Nodes],
