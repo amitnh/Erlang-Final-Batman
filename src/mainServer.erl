@@ -23,7 +23,7 @@
 
 -define(SERVER, ?MODULE).
 %%-define(UpdateTime, 1000). % time for sending the ETSES tables
--define(LineFrames, 80). %number of frames to show the line
+-define(LineFrames, 28). %number of frames to show the line
 -define(RefreshRate, 14).
 % ComputerNodes-> [tal@ubuntu,yossi@megatron....], size 4
 % ComputerAreas-> [{startX,endX,startY,endY},...] size 4

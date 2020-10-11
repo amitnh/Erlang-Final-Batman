@@ -155,8 +155,7 @@ updatedXYlocations(State)->
 
   %boarders check:
   if ((X < 0) or (X > 2000) or (Y < 0) or (Y > 2000)) ->
-            gen_server:cast(self(),{changeDir}),
-    {X0,Y0,CurrTime,false,true};
+    {X0,Y0,CurrTime,false};
     true ->  %if X or Y are out of bounds, need to check if theres a new border or if a terminate is necessary
             if ((X>EndX+DemilitarizedZone) or (X<StartX-DemilitarizedZone) or (Y>EndY+DemilitarizedZone) or (Y<StartY-DemilitarizedZone)) ->
               try %wait for the computerServer to bring back an answer about the borders
@@ -166,11 +165,11 @@ updatedXYlocations(State)->
                   %gen_server:stop(self());%Shut down MoveSimulator Server
       %%        gen_server:stop(self(), {normal,round(X),round(Y)},infinity);%Shut down MoveSimulator Server
                   true -> gen_server:cast(self(),{updateBorders,NewStartX,NewEndX,NewStartY,NewEndY})
-                end,       {X,Y,CurrTime,true,false}
+                end,       {X,Y,CurrTime,true}
 
               catch _:_-> castPlease(innerConnectionError)
               end;
-              true -> {X,Y,CurrTime,false,false}
+              true -> {X,Y,CurrTime,false}
             end
 
   end.
@@ -250,35 +249,37 @@ handle_cast({sendMsg,To,From,Msg}, State = #moveSimulator_state{}) ->
           Reply = gen_server:call(BestLinkPid,{receiveMsg,To,Msg,{self(),node()}}),
 
           if
-            (Reply == sent) -> {noreply, State#moveSimulator_state{}};
+            (Reply == sent) ->ok;
+%%              {noreply, State};
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                    %1.delete the neighbor 2.send the msg again to the next best link
               gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),
               gen_server:cast(self(),{sendMsg,To,{self(),node()},Msg}),% send the MSG again
-              {noreply, State#moveSimulator_state{}}
-          end,
-          {noreply, State#moveSimulator_state{}};
+              {noreply, State}
+          end;
+%%          {noreply, State};
         true -> % if the neighbor is on other computer and not the one that sent me the msg
           PcPid = State#moveSimulator_state.pcPid,
           Reply = gen_server:call(PcPid,{sendMsg,To,BestLink,Msg,{self(),node()}}),
           if
-            (Reply == sent) -> {noreply, State#moveSimulator_state{}};
+            (Reply == sent) -> ok;
+%%              {noreply, State};
             true-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                      %1.delete the neighbor 2.send the msg again to the next best link
               gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),
-              gen_server:cast(self(),{sendMsg,To,{self(),node()},Msg}),% send the MSG again
-              {noreply, State#moveSimulator_state{}}
-          end,
-              {noreply, State#moveSimulator_state{}}
+              gen_server:cast(self(),{sendMsg,To,{self(),node()},Msg})% send the MSG again
+%%              {noreply, State}
+          end
+%%              {noreply, State}
       end
     catch % if Msg didn't sent
           _:_-> % if neighbor didn't received the msg (Out Of Range / died for some reason) then
                   %1.delete the neighbor 2.send the msg again to the next best link
-                  gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg}),
-        {noreply, State#moveSimulator_state{}}
+                  gen_server:cast(MyBatman, {deleteNeighbor, BestLink,To,Msg})
     end;
-  true-> {noreply, State#moveSimulator_state{}} %i dont know "To", cant reach him
-end;
+  true-> ok %i dont know "To", cant reach him
+end,
+  {noreply, State};
 
 %=======================================================================================================
 
@@ -300,7 +301,7 @@ handle_cast({changeDir}, State = #moveSimulator_state{}) ->
 
 %updateEts updates the location of my PID in the etsX and etsY
 handle_cast({updateEts}, State = #moveSimulator_state{}) ->
-  {X,Y,CurrTime,ToTerminate,ChangedDir} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
+  {X,Y,CurrTime,ToTerminate} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
    if  ToTerminate -> {stop, normal, State};
      true ->
      RoundedOldX = round(State#moveSimulator_state.myX), % X in ets is rounded. not in myX record
@@ -385,7 +386,7 @@ terminate(Reason, State = #moveSimulator_state{}) ->
   Batman = State#moveSimulator_state.myBatman,
 
   Tokills = State#moveSimulator_state.tokill,
-
+  try
   if (Reason == normal) ->
     X = round(State#moveSimulator_state.myX),
     Y = round(State#moveSimulator_state.myY),
@@ -415,7 +416,9 @@ terminate(Reason, State = #moveSimulator_state{}) ->
 %%      catch _:M -> castPlease({movSimTerminate,catchError,M})
 %%      end;
       true -> ok
-      end,
+      end
+  catch _:_ -> ok
+  end,
   try
     [Tokill!exit_please||Tokill<-Tokills]
   catch

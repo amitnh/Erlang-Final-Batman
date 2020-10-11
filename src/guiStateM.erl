@@ -226,7 +226,7 @@ waiting(cast,paintnow,State = #guiStateM_state{}) ->
   {next_state, paint, State};
 
 %when the user hits apply, start drawing. next state - paint
-waiting(cast, {sendnewStats,Env},State = #guiStateM_state{}) ->
+waiting(cast, {sendnewStats,_Env},State = #guiStateM_state{}) ->
   gen_statem:cast({global, ?SERVER}, paintnow),
   {next_state, paint, State};
 

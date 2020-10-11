@@ -238,16 +238,14 @@ handle_cast({monitorMe,From}, State = #computerStateM_state{}) ->
 
 %removes Robin from ETS and cast mainServer to do so(Same as above but without X,Y
 handle_cast({removeRobin,Pid}, State = #computerStateM_state{}) ->
-  {X,Y} = searchXYbyPid(Pid),
+%%  {X,Y} = searchXYbyPid(Pid),
   MainServerNode = State#computerStateM_state.mainServer,
   castPlease({sendingDElete,Pid,node()}),
   gen_server:cast({global, MainServerNode},{removeRobin,Pid,node()}),
-%%  castPlease({removing,pid,Pid,xy,X,Y,ets:tab2list(etsX),ets:tab2list(etsY)}),
-  removeRobin(Pid,X,Y, State),
+  removeRobin(Pid, State),
   {noreply, State};
 
 handle_cast({msgSent,From,To}, State = #computerStateM_state{}) ->
-%%  castPlease({sending,from,From,to,To}),
   gen_server:cast({global, State#computerStateM_state.mainServer},{addMessage, From,To}),
 {noreply, State};
 
@@ -343,19 +341,7 @@ getComputer(X,Y,[{StartX,EndX,StartY,EndY}|_],[Node|_]) when ((StartX<X) and (X<
 getComputer(X,Y,[_|Areas],[_Node|Nodes]) -> getComputer(X,Y,Areas,Nodes).
 
 %removes Robin from ETS and cast mainServer to do so
-removeRobin(Pid,X,Y, State = #computerStateM_state{}) ->
-%%  [ {_,TempX}] = ets:lookup(etsX,X),
-%%  [{_, TempY}]= ets:lookup(etsY,Y),
-%%  ListX = TempX -- [Pid],% remove the pid from the old location
-%%  ListY = TempY -- [Pid],
-%%  if length(ListX)>0 ->ets:insert(etsX,[{X,ListX}]);
-%%    true->  ets:delete(etsX,X)
-%%  end,
-%%  if length(ListY)>0 ->ets:insert(etsY,[{Y,ListY}]);
-%%    true->  ets:delete(etsY,Y)
-%%  end,
-%%  castPlease({removeingRobin,Pid}),
-  %cast to main server to remove the pid from the main etsRobins
+removeRobin(Pid, State = #computerStateM_state{}) ->
   MainServerNode = State#computerStateM_state.mainServer,
   gen_server:cast({global, MainServerNode},{removeRobin,Pid,node()}). % todo change
 
@@ -363,23 +349,23 @@ removeRobin(Pid,X,Y, State = #computerStateM_state{}) ->
 
 
 
-searchXYbyPid(Pid) ->
-  FirstX = ets:first(etsX),
-  FirstY = ets:first(etsY),
-  X = search(etsX,FirstX,Pid),
-  Y = search(etsY,FirstY,Pid),
-  {X,Y}.
+%%searchXYbyPid(Pid) ->
+%%  FirstX = ets:first(etsX),
+%%  FirstY = ets:first(etsY),
+%%  X = search(etsX,FirstX,Pid),
+%%  Y = search(etsY,FirstY,Pid),
+%%  {X,Y}.
 
 %Look for The right X or Y for an existing Pid int he ets given
-search(_,'$end_of_table',_) -> notfound;
-search(Ets, Key,Pid) ->
-  [{_Key, Pids}] = ets:lookup(Ets,Key),
-  IsMember =  lists:member(Pid,Pids), %check if the pid is in the list of pids
-  if
-    IsMember-> Key;
-    true ->
-        search(Ets,ets:next(Ets,Key),Pid)
-  end.
+%%search(_,'$end_of_table',_) -> notfound;
+%%search(Ets, Key,Pid) ->
+%%  [{_Key, Pids}] = ets:lookup(Ets,Key),
+%%  IsMember =  lists:member(Pid,Pids), %check if the pid is in the list of pids
+%%  if
+%%    IsMember-> Key;
+%%    true ->
+%%        search(Ets,ets:next(Ets,Key),Pid)
+%%  end.
 
 % sending monitorMe cast to myComputerServer for every pid in the ets
 monitorAllRobins(MyMonitor) ->
@@ -406,19 +392,15 @@ monitorRobins(MyComputerServer) ->
       erlang:monitor(process,Pid),
       monitorRobins(MyComputerServer);
 
-    {'DOWN', Ref, process, Pid, normal} ->
-      castPlease({removeRobin,Pid}),
+    {'DOWN', _Ref, process, Pid, normal} ->
       gen_server:cast(MyComputerServer,{removeRobin, Pid}),
       monitorRobins(MyComputerServer);
 
-    {'DOWN', Ref, process, Pid, shutdown} ->
-      castPlease({shuttingdown,ref,Ref,pid,Pid}),
-      castPlease({removeRobin,Pid}),
+    {'DOWN', _Ref, process, Pid, shutdown} ->
       gen_server:cast(MyComputerServer,{removeRobin, Pid}),
       monitorRobins(MyComputerServer);
 
-    {'DOWN', Ref, process, Pid,  Reason} ->
-      castPlease({notnormal,ref,Ref,pid,Pid,reason,Reason}),
+    {'DOWN', _Ref, process, Pid,  _Reason} ->
       gen_server:cast(MyComputerServer,{removeRobin, Pid}),
 
 %%      gen_server:cast(MyComputerServer,{generateRobin}),

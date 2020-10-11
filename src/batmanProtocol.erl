@@ -179,7 +179,7 @@ handle_cast({ogm,{SeqNum, TTL,OriginatorAddress},FromAddress}, State = #batmanPr
   {noreply, NewState};
 
 %Msg failed: delete neighbor
-handle_cast({deleteNeighbor, ToDelete,AddressFrom,Msg},State = #batmanProtocol_state{}) ->
+handle_cast({deleteNeighbor, ToDelete,AddressFrom,_Msg},State = #batmanProtocol_state{}) ->
 NewKnown = deleteNeighbor(ToDelete,AddressFrom,State#batmanProtocol_state.known),
 {noreply, State#batmanProtocol_state{known = NewKnown}};
 
@@ -251,9 +251,9 @@ processOgm(State, {SeqNum, TTL,OriginatorAddress},FromAddress) ->
  if IsKnown->
    %=====================in the map, update it=================
    KnownBatman = maps:get(OriginatorAddress,Known),
-   {CurrentSeqNumber, BestLink, LastAwareTime, ListOfNeighbors} = KnownBatman,
+   {CurrentSeqNumber, BestLink, _LastAwareTime, ListOfNeighbors} = KnownBatman,
    Neighbor = getNeighbor(FromAddress,ListOfNeighbors,TTL), %returs the neighbor, or a new neighbor with an empty SeqList
-   {_FromAdd,SeqList, LastTTL, LastValidTime} =Neighbor,
+   {_FromAdd,SeqList, LastTTL, _LastValidTime} =Neighbor,
      if SeqList == [] -> % not a neighbor (yet)
         if CurrentSeqNumber < SeqNum ->% a new *Current* Seq Num
           NewKnowBatman = updateCurrSeqNum(KnownBatman,FromAddress,SeqNum,lastTTL,WindowSize), % return a new KnownBatman with everthing updated
