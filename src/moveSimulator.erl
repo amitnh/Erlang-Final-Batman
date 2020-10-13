@@ -301,6 +301,7 @@ handle_cast({changeDir}, State = #moveSimulator_state{}) ->
 
 %updateEts updates the location of my PID in the etsX and etsY
 handle_cast({updateEts}, State = #moveSimulator_state{}) ->
+  try
   {X,Y,CurrTime,ToTerminate} = updatedXYlocations(State), %also checks if the borders are ok or should i terminate and move to another nearby PC
    if  ToTerminate -> {stop, normal, State};
      true ->
@@ -336,7 +337,9 @@ handle_cast({updateEts}, State = #moveSimulator_state{}) ->
     {noreply, State#moveSimulator_state{myX = X,myY = Y,time = CurrTime}}
     catch _:_ -> {stop, normal, State}
     end
-   end;
+   end
+  catch _:_ ->{stop, normal, State}
+    end;
 
 %%============sendToNeighbors=============================
 %% sends OGM to radius pids
@@ -406,15 +409,9 @@ terminate(Reason, State = #moveSimulator_state{}) ->
         if (length(ListY)>0) ->ets:insert(etsY,[{Y,ListY}]);
           true-> ets:delete(etsY,Y)
         end
-%%      ObjectXcheck = ets:lookup(etsX,X),
-%%      ObjectYcheck= ets:lookup(etsY,Y),
-%%      if ((ObjectXcheck == []) or (ObjectYcheck == []))  -> ok;
-%%        true -> terminate(Reason, State), castPlease(terminateAgain)
-%%      end
+
       end;
-%%      gen_server:cast(Batman,stop);
-%%      catch _:M -> castPlease({movSimTerminate,catchError,M})
-%%      end;
+
       true -> ok
       end
   catch _:_ -> ok
@@ -459,8 +456,7 @@ robinsInRadius(State,OGM) ->
   %Xlist and Ylist are all the pids in square of radius x radius
   Xlist = getLineInRadius(etsX,MyX,Radius),
   Ylist = getLineInRadius(etsY,MyY,Radius),
-%%  Xlist = getPrev(etsX,MyX,MyX,[]) ++ getNext(etsX,MyX,MyX,[]),
-%%  Ylist = getPrev(etsY,MyY,MyY,[]) ++ getNext(etsY,MyY,MyY,[]),
+
 
   % case im close to the border, i will send a request to computerServer to look for neighbors in other computers
   if ((MyX + Radius > EndX - DemiZone) or (MyX - Radius > StartX + DemiZone)) ->
@@ -516,7 +512,6 @@ getCircle(MyX,MyY,Square,Radius) ->
 %%===========================================================
 
 %%getLineInRadius(ETSLIST,OriginX,ListofRobinsInLine) return all robins at radius-x<x<radius+x
-
 getLineInRadius(ETS,X,Radius) -> lists:flatten([[{RobinX,{Pid,node()}}||Pid<-Pids]|| {RobinX,Pids}<- ets:tab2list(ETS),((RobinX<X+Radius) or(RobinX>X-Radius)) ]).
 
 
