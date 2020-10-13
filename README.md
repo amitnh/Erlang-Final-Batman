@@ -2,6 +2,8 @@
 this project is simulating an envierment of bi-directional links that transfer messages from one to another via BATMAN protocol.
 it can work on 2-5 diffrent nodes (computers)
 
+![alt text](https://i.ibb.co/RSLwVn9/4PC.png)
+
 **The Protocol:**
  B.A.T.M.A.N. is a proactive routing protocol for Wireless Ad-hoc Mesh
    Networks.  The protocol proactively maintains information about the
