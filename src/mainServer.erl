@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author amit
+%%% @author amit and kapelnik
 %%% @copyright (C) 2020, <COMPANY>
 %%% @doc
 %%%
@@ -71,10 +71,10 @@ init([ComputerNodes, ComputerAreas]) ->
   spawn_link(fun()->monitorComputers(ComputerNodes,node()) end),
   % specs -> {Radius,NumofRobins, DemiZone,OGMTime,MaxVelocity,WindowSize,TTL},
   %start with default values
-  spawnComputer(ComputerNodes,ComputerAreas, {300,4, 50,1000,10,128,30},loop),
+  spawnComputer(ComputerNodes,ComputerAreas, {300,20, 50,1000,10,128,30},loop),
   spawn_link(fun()->testMsgSending() end),
 
-  {ok, #mainServer_state{processes = [], computerNodes = ComputerNodes,computerAreas = ComputerAreas, specs = {300,4, 50,1000,10,128,30}}}.
+  {ok, #mainServer_state{processes = [], computerNodes = ComputerNodes,computerAreas = ComputerAreas, specs = {300,20, 50,1000,10,128,30}}}.
 testMsgSending()->
  try
   receive after 2000  ->
