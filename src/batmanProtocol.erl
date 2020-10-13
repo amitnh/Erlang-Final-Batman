@@ -7,7 +7,7 @@
 %%% Created : 24. Jul 2020 12:48 PM
 %%%-------------------------------------------------------------------
 -module(batmanProtocol).
--author("amit").
+-author("amit and kapelnik").
 
 -behaviour(gen_server).
 

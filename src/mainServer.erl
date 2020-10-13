@@ -11,7 +11,7 @@
 %%%-------------------------------------------------------------------
 
 -module(mainServer).
--author("amit").
+-author("amit and kapelnik").
 -behaviour(gen_server).
 
 %% API

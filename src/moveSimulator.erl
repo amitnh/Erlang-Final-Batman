@@ -7,7 +7,7 @@
 %%% Created : 01. Aug 2020 12:36 PM
 %%%-------------------------------------------------------------------
 -module(moveSimulator).
--author("amit").
+-author("amit and kapelnik").
 
 -behaviour(gen_server).
 

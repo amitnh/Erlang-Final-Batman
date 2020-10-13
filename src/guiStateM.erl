@@ -7,7 +7,7 @@
 %%% Created : 15. Aug 2020 15:07
 %%%-------------------------------------------------------------------
 -module(guiStateM).
--author("kapelnik").
+-author("amit and kapelnik").
 
 -behaviour(gen_statem).
 

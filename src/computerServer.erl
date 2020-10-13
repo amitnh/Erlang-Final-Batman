@@ -7,7 +7,7 @@
 %%% Created : 28. Jun 2020 6:42 PM
 %%%-------------------------------------------------------------------
 -module(computerServer).
--author("amit").
+-author("amit and kapelnik").
 
 -behaviour(gen_server).
 
