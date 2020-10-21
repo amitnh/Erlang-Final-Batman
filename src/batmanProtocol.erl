@@ -90,6 +90,7 @@ handle_call({findBestLink, To}, _From, State = #batmanProtocol_state{}) ->
 %%  castPlease({batmanNode,node(),myknown, State#batmanProtocol_state.known}),
   {reply, BestLink, State};
 
+%% returns a random known Robin
 handle_call({getKnownFrom}, _From, State = #batmanProtocol_state{}) ->
    Known = State#batmanProtocol_state.known,
    Size =maps:size(Known),
